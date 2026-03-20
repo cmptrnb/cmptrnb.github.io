@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dumbproxy with SNI spoofing</title>
+</head>
+<body>
+
+<p><a href="https://cmptrnb.github.io">https://cmptrnb.github.io</a></p>
+
+<h1>Dumbproxy with SNI spoofing</h1>
+
+<p>Dumbproxy is a simple HTTP/SOCKS5 forward proxy. It supports SNI spoofing, which is useful in environments where there is an SNI whitelist.</p>
+
+<p>This article fleshes out the details from a comment on the discussion "[Russia] Censor has a new method of blocking" on <a href="https://github.com/net4people/bbs/issues/490#issuecomment-3899961786" target="_blank">GitHub</a>:</p>
+
+<blockquote>I had a chance to run a couple of tests on machines connected to Rostelecom and Yota respectively. Basically, simple HTTPS proxy with SNI spoofing was enough to bypass restrictions towards DigitalOcean and Hetzner VPS. The server was just a basic <a href="https://github.com/SenseUnit/dumbproxy" target="_blank">dumbproxy</a> instance set up by <a href="https://github.com/Snawoot/easy-dp" target="_blank">easy-dp</a>.</blockquote>
+
+<h2>1. Linux server</h2>
+
+<p>Open your server firewall for input:</p>
+
+<ul>
+<li>Port <code>tcp/80</code>. It will be used by Let's Encrypt.</li>
+<li>Port <code>tcp/443</code>. It will be used by Dumbproxy.</li>
+</ul>
+
+<p>If you have not already done so, SSH into your server as root.</p>
+
+<p>Update your existing software packages:</p>
+
+<p><code>apt update &amp;&amp; apt upgrade -y</code></p>
+
+<p>Install the prerequisite packages for the ACME certificate management script:</p>
+
+<p><code>apt install -y curl wget socat cron</code></p>
+
+<p>Run <code>easy-dp</code> to obtain an IP-based SSL certificate and install Dumbproxy:</p>
+
+<p><code>curl https://raw.githubusercontent.com/Snawoot/easy-dp/refs/heads/master/easy-dp.sh | bash -s</code></p>
+
+<p>At the end of the script's run, it displays a message such as:</p>
+
+<pre>
+=========================
+Installation is finished!
+=========================
+
+Proxy URL: https://auto:MJ9WYdaV6I@123.123.123.123:443
+
+which is
+
+Proxy protocol: https
+Proxy port:     443
+Proxy host:     123.123.123.123
+Proxy user:     auto
+Proxy password: MJ9WYdaV6I
+</pre>
+
+<p>Make a note of these values.</p>
+
+<p>Exit your SSH session with the server:</p>
+
+<p><code>exit</code></p>
+
+
+<h2>2. Windows PC client</h2>
+
+<p>Open a browser.</p>
+
+<p>Navigate to <a href="https://github.com/SenseUnit/dumbproxy/releases" target="_blank">https://github.com/SenseUnit/dumbproxy/releases</a>.</p>
+
+<p>Download the most recent <code>dumbproxy.windows-amd64.exe</code>.</p>
+
+<p>Open Windows PowerShell.</p>
+
+<p>Change to the location of the downloaded executable, e.g.:</p>
+
+<p><code>cd Downloads</code></p>
+
+<p>Issue the Windows client command that follows, replacing the parameter values in the example with your own values:</p>
+
+<p><code>.\dumbproxy.windows-amd64.exe -proxy 'h2://auto:MJ9WYdaV6I@123.123.123.123:443?sni=ozon.ru'</code></p>
+
+<p>The meanings of the values in the example are:</p>
+
+<ul>
+<li><code>dumbproxy.windows-amd64.exe</code> is the executable</li>
+<li><code>h2</code> is the protocol HTTP/2</li>
+<li><code>auto</code> is the username</li>
+<li><code>MJ9WYdaV6I</code> is the password</li>
+<li><code>123.123.123.123</code> is your server's IP address</li>
+<li><code>443</code> is the destination port</li>
+<li><code>ozon.ru</code> is the spoof SNI</li>
+</ul>
+
+<p>After the proxy server starts up, you should see a message:</p>
+
+<p><code>Proxy server started.</code></p>
+
+<p>Leave the PowerShell window open with Dumbproxy for Windows running in it.</p>
+
+<p>Go to <strong>Settings</strong> &gt; <strong>Network &amp; internet</strong> &gt; <strong>Proxy</strong>.</p>
+
+<p>Under <strong>Manual proxy setup</strong>, set the proxy <strong>ON</strong> with IP address <code>127.0.0.1</code> and port <code>8080</code>.</p>
+
+<p>Open a browser.</p>
+
+<p>Browse to whatever web site you wish to visit.</p>
+
+
+<h2>3. Issues</h2>
+
+<p>If you experience any issues, raise them on <a href="https://github.com/SenseUnit/dumbproxy/issues" target="_blank">https://github.com/SenseUnit/dumbproxy/issues</a>.</p>
+
+
+</body>
+</html>
+
+

@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3X-UI server with domestic relay server</title>
+</head>
+<body>
+
+<p><a href="https://cmptrnb.github.io">https://cmptrnb.github.io</a></p>
+
+<h1>3X-UI server with domestic relay server</h1>
+
+<p>The scenario here is that direct connection to an international VPS is blocked. However, connecting from a domestic VPS to an international VPS is allowed. Therefore the solution is a double hop from the client PC to a domestic VPS and from the domestic VPS to an international VPS.</p>
+
+<pre>
++-----------+      +--------------+      +-------------------+
++           +      +              +      +                   +
++           +      +  45.45.45.45 +      +  123.123.123.123  +
++ Client PC +----->+ Domestic VPS +----->+ International VPS +-----> WWW
++           +      +    Relay     +      +      3X-UI        +
++           +      +              +      +                   +
++-----------+      +--------------+      +-------------------+
+</pre>
+
+<p>The international VPS will be configured using the 3X-UI panel.</p>
+
+<p>For the domestic VPS relay, there are several common methods of relaying traffic from one server to another:</p>
+
+<ul>
+<li>iptables.</li>
+<li>haproxy.</li>
+<li>Nginx stream proxy. This functions at Layer 4 TCP/UDP-level to forward raw data streams, which is distinct from the usual Layer 7 HTTP-level reverse proxy.</li>
+<li>xray-core can forward traffic, either by decoding and recoding traffic, or by using <code>dokodemo-door</code> input to forward any packets unchanged.</li>
+</ul>
+
+<p>In this article we will use the Nginx stream proxy function to build a simple and efficient Layer 4 relay server.</p>
+
+<p>This article draws in part on <a href="https://github.com/xcvtt/miniature-octo-palm-tree" rel="noreferrer" target="_blank">https://github.com/xcvtt/miniature-octo-palm-tree</a>.</p>
+
+
+<h2>0. Prerequisites</h2>
+
+<p>We assume that you already have:</p>
+
+<ul>
+<li>an international VPS</li>
+<li>optionally, a domain name and a DNS A record pointing from your international server hostname to your international server IP address (we will not use the domain name possibility in the rest of this tutorial)</li>
+<li>a domestic VPS</li>
+<li>a client PC</li>
+</ul>
+
+
+<h2>1. Install and configure 3X-UI on international server</h2>
+
+<p>3X-UI is a graphical tool for managing an xray-core server and generating client configurations. You can also configure subscription functionality, although we will not use that in this simple scenario. We use the installation script from the official 3X-UI repository.</p>
+
+<h3>1.1. Open firewall</h3>
+
+<p>At this point, you must open:</p>
+
+<ul>
+<li>Port <code>tcp/80</code>. It will be used by Let's Encrypt.</li>
+<li>Port <code>tcp/443</code>. It will be used by VLESS Reality.</li>
+</ul>
+
+
+<h3>1.2. Obtain SSL certificate for server</h3>
+
+<p>SSH into your international VPS as root.</p>
+
+<p>Update your existing software packages on the server:</p>
+
+<p><code>apt update &amp;&amp; apt upgrade -y</code></p>
+
+<p>Install the prerequisite packages for the ACME certificate management script:</p>
+
+<p><code>apt install -y curl wget socat cron</code></p>
+
+<p>Download and run the ACME installation script:</p>
+
+<p><code>curl https://get.acme.sh | sh</code></p>
+
+<p>Set the Certificate Authority to Let's Encrypt:</p>
+
+<p><code>/root/.acme.sh/acme.sh --set-default-ca --server letsencrypt</code></p>
+
+
+<h3>1.3. Install 3X-UI</h3>
+
+<p>Run the official 3X-UI installation script:</p>
+
+<p><code>bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)</code></p>
+
+<p>You are asked if you want a customized port or a random port:</p>
+
+<p><code>Would you like to customize the Panel Port settings? (If not, a random port will be applied) [y/n]:</code></p>
+
+<p>Enter <code>n</code> for no to get a random port.</p>
+
+<p>The random port is displayed, e.g.:</p>
+
+<pre>
+Generated random port: 24784
+Port set successfully: 24784
+Username and password updated successfully
+Base URI path set successfully
+</pre>
+
+<p>You are prompted for the option you want for SSL certificate set-up:
+
+<pre>
+═══════════════════════════════════════════
+     SSL Certificate Setup (MANDATORY)
+═══════════════════════════════════════════
+For security, SSL certificate is required for all panels.
+Let's Encrypt now supports both domains and IP addresses!
+
+Choose SSL certificate setup method:
+1. Let's Encrypt for Domain (90-day validity, auto-renews)
+2. Let's Encrypt for IP Address (6-day validity, auto-renews)
+3. Custom SSL Certificate (Path to existing files)
+Note: Options 1 & 2 require port 80 open. Option 3 requires manual paths.
+</pre>
+
+<p>In the scenario in this article, you will enter <code>2</code>, meaning get a certificate for your IP address, without specifying a domain name.</p>
+
+<p>You are prompted for an IPv6 address:</p>
+
+<pre>
+Using Let's Encrypt for IP certificate (shortlived profile)...
+Do you have an IPv6 address to include? (leave empty to skip):
+</pre>
+
+<p>In the scenario in this article, you will just press <strong>Enter</strong>.</p>
+
+<p>You are asked to confirm that you will use port <code>80</code> for validation:</p>
+
+<pre>
+Setting up Let's Encrypt IP certificate (shortlived profile)...
+Note: IP certificates are valid for ~6 days and will auto-renew.
+Default listener is port 80. If you choose another port, ensure external port 80 forwards to it.
+Port to use for ACME HTTP-01 listener (default 80):
+</pre>
+
+<p>In the scenario in this article, just press <strong>Enter</strong> to use port <code>80</code>.</p>
+
+<p>At the end of its run, the script displays your generated details. For example:</p>
+
+<pre>
+═══════════════════════════════════════════
+     Panel Installation Complete!
+═══════════════════════════════════════════
+Username:    XeDlq6j2e5
+Password:    hDRavPCEcS
+Port:        24784
+WebBasePath: UMEZjfcEvUVWk7oKdo
+Access URL:  https://123.123.123.123:24784/UMEZjfcEvUVWk7oKdo
+═══════════════════════════════════════════
+</pre>
+
+<p>Details of the X-UI control menu are also displayed:
+
+<pre>
+┌───────────────────────────────────────────────────────┐
+│  x-ui control menu usages (subcommands):              │
+│                                                       │
+│  x-ui              - Admin Management Script          │
+│  x-ui start        - Start                            │
+│  x-ui stop         - Stop                             │
+│  x-ui restart      - Restart                          │
+│  x-ui status       - Current Status                   │
+│  x-ui settings     - Current Settings                 │
+│  x-ui enable       - Enable Autostart on OS Startup   │
+│  x-ui disable      - Disable Autostart on OS Startup  │
+│  x-ui log          - Check logs                       │
+│  x-ui banlog       - Check Fail2ban ban logs          │
+│  x-ui update       - Update                           │
+│  x-ui legacy       - Legacy version                   │
+│  x-ui install      - Install                          │
+│  x-ui uninstall    - Uninstall                        │
+└───────────────────────────────────────────────────────┘
+</pre>
+
+<h3>1.4. Open firewall</h3>
+
+<p>You must now open your firewall for TCP input on the generated port.</p>
+
+<p>In our example, that is port <code>tcp/24784</code>.</p>
+
+<p>If necessary, and depending on what firewall you are using, remember also that you must persist this change across reboots.</p>
+
+
+<h3>1.5. Log in to 3X-UI panel</h3>
+
+<p>Exit your SSH session with the international VPS:</p>
+
+<p><code>exit</code></p>
+
+<p>Now open a browser.</p>
+
+<p>Navigate to the generated panel URL <code>https://ip:port/secret_path</code>.</p>
+
+<p>In our example, that is <code>https://123.123.123.123:24784/UMEZjfcEvUVWk7oKdo</code>.</p>
+
+<p>Enter the generated username and password.</p>
+
+<p>In our example, that is username <code>XeDlq6j2e5</code> and password <code>hDRavPCEcS</code>.</p>
+
+
+<h3>1.6. Disable subscription service</h3>
+
+<p>After logging into the panel for the first time, disable the subscription service, which is not needed in this scenario:</p>
+
+<ol>
+<li>In the menu on the left, go to <strong>Panel Settings</strong>.</li>
+<li>Select the tab <strong>Subscription</strong>.</li>
+<li>Toggle <strong>Subscription Service</strong> to the <strong>OFF</strong> position.</li>
+</ol>
+
+<h3>1.7. Create inbound</h3>
+
+<p>Now create the inbound.</p>
+
+<p>In the menu on the left of the 3X-UI panel, go to <strong>Inbounds</strong>.</p>
+
+<p>Click <strong>Add Inbound</strong> and enter settings:<p>
+
+<ul>
+<li>Enable - <strong>ON</strong></li>
+<li>Remark - anything you like</li>
+<li>Protocol - <code>vless</code></li>
+<li>Listen IP - blank (meaning listen on all interfaces)</li>
+<li>Port - <code>443</code></li>
+</ul>
+
+Expand <strong>Client</strong> and enter:
+
+<ul>
+<li>Authentication - <code>X25519</code></li>
+<li>Transmission - <code>TCP (RAW)</code></li>
+<li>Security - <code>Reality</code></li>
+<li>uTLS - <code>chrome</code> or specify your choice of browser to emulate</li>
+<li>Target - use the generated default or specify your choice depending on your country</li>
+<li>SNI - use the generated default or specify your choice depending on your country</li>
+</ul>
+
+<p>Note: An enhancement issue <a href="https://github.com/MHSanaei/3x-ui/issues/3841" rel="noreferrer" target="_blank">https://github.com/MHSanaei/3x-ui/issues/3841</a> requests adding flow and seed to VLESS Reality in 3X-UI. This will prevent a warning in the xray-core client: <code>The feature VLESS (with no Flow, etc.) is deprecated, not recommended for using, and might be removed. Please migrate to VLESS with Flow & Seed as soon as possible.</code></p>
+
+<p>Click <strong>Get New Cert</strong>.</p>
+
+<p>Click <strong>Create</strong>.</p>
+
+
+<h3>1.8. Export client configuration URL</h3>
+
+<p>After adding an inbound, click the three dots at the start of its row.</p>
+
+<p>Select <strong>Export All URLs</strong>.</p>
+
+<p>Copy the export results to the Windows clipboard on your PC, e.g.:</p>
+
+<p><code>
+vless://1eef213f-b861-4c18-8fe1-09fc6f6ce824@123.123.123.123:443?type=tcp&encryption=mlkem768x25519plus.native.0rtt.Y9RJQEANTXnZRUriFTOFaREKCKHMl059_cXiHUoRTgk&security=reality&pbk=vO8UgToRzHspcOYtYSctYBBatRjHK68EXJc2L9tUsQM&fp=chrome&sni=www.apple.com&sid=053f41e6&spx=%2F#7sy8zwxa</code></p>
+
+<p>Paste this into Windows Notepad, in case you need to use the Windows clipboard for something else.</p>
+
+
+<h3>1.9. Log out</h3>
+
+<p>In the menu on the left of the 3X-UI panel, click <strong>Log Out</strong>.</p>
+
+
+
+<h2>2. Install and configure Nginx on domestic VPS</h2>
+
+<p>The domestic VPS will intercept packets from the client and relay them to the international VPS.</p>
+
+
+<h3>2.1. Open firewall</h3>
+
+<p>At this point, you must open for input:</p>
+
+<ul>
+<li>Port <code>tcp/443</code>. It will be used by the Nginx stream relay.</li>
+</ul>
+
+
+<h3>2.2. Update server</h3>
+
+<p>SSH into your domestic VPS as root.</p>
+
+<p>Update your existing software packages on the server:</p>
+
+<p><code>apt update &amp;&amp; apt upgrade -y</code></p>
+
+
+<h3>2.2. Install Nginx</h3>
+
+<p>Install Nginx and the Nginx stream module:</p>
+
+<p><code>apt install -y nginx libnginx-mod-stream</code></p>
+
+
+<h3>2.3. Configure stream</h3>
+
+<p>Edit the Nginx configuration file <code>/etc/nginx/nginx.conf</code>.</p>
+
+<p>Add a new stream configuration by appending these lines, replacing <code>123.123.123.123</code> by the actual IP address of your international server:</p>
+
+<pre>
+stream {
+    upstream backend_server {
+        server 123.123.123.123:443;
+    }
+
+    server {
+        listen 443;
+        proxy_pass backend_server;
+    }
+}
+</pre>
+
+<p>Save the file.</p>
+
+
+<h3>2.4. Activate stream</h3>
+
+<p>Check your configuration file:</p>
+
+<p><code>nginx -t</code></p>
+
+<p>Restart Nginx to apply the changes:</p>
+
+<p><code>systemctl restart nginx</code></p>
+
+
+<h3>2.5. Log out</h3>
+
+<p>Exit your SSH session with the domestic server:</p>
+
+<p><code>exit</code></p>
+
+
+
+<h2>3. Install and configure v2rayN on client PC</h2>
+
+<h3>3.1. Install v2rayN</h3>
+
+<p>On your client PC, open a browser.</p>
+
+<p>Navigate to <a href="https://github.com/2dust/v2rayn/releases" rel="noreferrer" target="_blank">https://github.com/2dust/v2rayn/releases</a>.</p>
+
+<p>Download <code>v2rayN-windows-64.zip</code>.</p>
+
+<p>Unzip the zip file.</p>
+
+
+<h3>3.2. Configure v2rayN</h3>
+
+<p>Launch <code>v2rayN.exe</code>.</p>
+
+<p>If you get a message, <code>Windows protected your PC</code>, then click <strong>More info</strong> followed by <strong>Run anyway</strong>.</p>
+
+<p>Copy the internation server's configuration URL from Windows Notepad into the Windows clipboard.</p>
+
+<p>In the v2ray main menu, select <strong>Configuration</strong>, then select <strong>Import share links from clipboard</strong>.</p>
+
+<p><strong>*** Now for the most important part to relay traffic via your domestic server! ***</strong></p>
+
+<p><strong>*** In the server specification in v2rayN, replace the international IP <code>123.123.123.123</code> with the domestic relay server IP <code>45.45.45.45</code>. ***</strong></p>
+
+<p>When you've done that, press <strong>Enter</strong> to start the v2rayN connection.</p>
+
+<p>In the system tray at the bottom right of your Windows desktop, find the v2rayN icon, right-click on it, and select <strong>Set system proxy</strong>.</p>
+
+
+</body>
+</html>
+
+
