@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNSTT tunnel over DNS</title>
+</head>
+<body style="max-width:48em;margin:0 auto;">
+
+<p><a href="https://cmptrnb.github.io">https://cmptrnb.github.io</a></p>
+
+<h1>DNSTT tunnel over DNS</h1>
+
+<p>Here are practical instructions for tunneling your internet traffic as DNS requests and responses on port 53. This sometimes works in tightly restricted network environments. This post expands on the developer's documentation from <a href="https://www.bamsoftware.com/software/dnstt">https://www.bamsoftware.com/software/dnstt</a>.</p>
+
+
+<h2>0. Prerequisites and limitations</h2>
+
+<p>Before you begin, you will need:</p>
+<ul>
+<li>An up-to-date Debian or Ubuntu Linux server</li>
+<li>Windows 11 PC with Mozilla Firefox browser installed</li>
+<li>A domain name that you own</li>
+</ul>
+
+<p>A discussion on <a href="https://github.com/net4people/bbs/issues/586">https://github.com/net4people/bbs/issues/586</a> indicates further limitations in environments that are tightly restricted. To fly under the radar, use your DNSTT tunnel only for text files or small images (no videos or gaming).</p>
+
+
+<h2>1. Create DNS entries</h2>
+
+<p>Go into your name registrar's configuration panel.</p>
+
+<p>Create a record for your server's host name (replacing <code>example.com</code> below by your actual domain). The <code>tns</code> is just an example. Since all the tutorials use this example, if you want to disguise your server, you might be better using a different value. Keep it short. Example:</p>
+
+<blockquote><code>A</code> <code>tns.example.com</code> points to your server's IPv4 address</blockquote>
+
+<p>If you are using IPv6 then also create an <code>AAAA</code> record for your server's host name (replacing <code>example.com</code> by your actual domain):</p>
+
+<blockquote><code>AAAA</code> <code>tns.example.com</code> points to your server's IPv6 address</blockquote>
+
+<p>Now add an <code>NS</code> record, which defines your server as the nameserver for everything in the <code>t.example.com</code> DNS zone (replacing <code>example.com</code> by your actual domain). The <code>t</code> subdomain is just an example. Since all the tutorials use this example, if you want to disguise your server, you might be better using a different value. Keep it short. Example:</p>
+
+<blockquote><code>NS</code> <code>t.example.com</code> is managed by <code>tns.example.com</code></blockquote>
+
+<p>Depending on your registrar and on how much use your domain has previously had, you will need to allow some time for these new entries to propagate.</p>
+
+
+<h2>2. Open firewall on server</h2>
+
+<p>Input DNS requests will arrive on port <code>udp/53</code>. To avoid having <code>dnstt-server</code> needing to listen on this privileged port, input on port <code>udp/53</code> will be redirected to port <code>udp/5300</code>, where <code>dnstt-server</code> will listen.</p>
+
+<p>Open the firewall for IPv4 input (assuming your primary network interface is named <code>eth0</code>):</p>
+
+<p><code>sudo iptables -I INPUT -p udp --dport 5300 -j ACCEPT</code></p>
+<p><code>sudo iptables -t nat -I PREROUTING -i eth0 -p udp --dport 53 -j REDIRECT --to-ports 5300</code></p>
+
+<p>If necessary, open the firewall for IPv6 input (assuming your primary network interface is named <code>eth0</code>):</p>
+
+<p><code>sudo ip6tables -I INPUT -p udp --dport 5300 -j ACCEPT</code></p>
+<p><code>sudo ip6tables -t nat -I PREROUTING -i eth0 -p udp --dport 53 -j REDIRECT --to-ports 5300</code></p>
+
+<p>Persist these rules across reboots. There are several ways to do this. As just one example, if you have already installed <code>iptables-persistent</code>, then reconfigure <code>iptables-persistent</code> like this:
+
+<p><code>sudo dpkg-reconfigure iptables-persistent</code></p>
+
+
+<h2>3. Install Go language on server</h2>
+
+<p>In a browser on your local workstation, visit <a href="https://go.dev/dl">https://go.dev/dl</a> to determine the most recent version of the Go language compiler. We will use version 1.26.1 in our examples. You may need to change this version number at the time you run this tutorial.</p>
+
+<p>In your SSH session with your server, change up to your home directory:</p>
+
+<p><code>cd ~</code></p>
+
+<p>Download the most recent Go language tarball:</p>
+
+<p><code>curl -OL https://go.dev/dl/go1.26.1.linux-amd64.tar.gz</code></p>
+
+<p>Remove any previous installations of the Go language:</p>
+
+<p><code>sudo rm -rf /usr/local/go</code></p>
+
+<p>Extract the tarball into <code>/usr/local</code>:</p>
+
+<p><code>sudo tar -C /usr/local -xzf go1.26.1.linux-amd64.tar.gz</code></p>
+
+<p>Add <code>/usr/local/go/bin</code> to your PATH environment variable. You can do this by adding the following line to your <code>~/.profile</code> or <code>/etc/profile</code> (for a system-wide installation):</p>
+
+<p><code>export PATH=$PATH:/usr/local/go/bin</code></p>
+
+<p>Save the file.</p>
+
+<p>The easiest way to make this effective immediately is to log off and log on again.</p>
+
+<p>Verify that you've installed Go by opening a command prompt and typing the following command:</p>
+
+<p><code>go version</code></p>
+
+<p>You will see a response such as:</p>
+
+<p><code>go version go1.26.1 linux/amd64</code></p>
+
+<p>Verify that the command prints the installed version of Go.</p>
+
+
+<h2>4. Build DNSTT on server</h2>
+
+<p>In a browser on your local workstation, visit <a href="https://www.bamsoftware.com/software/dnstt">https://www.bamsoftware.com/software/dnstt</a> to determine the most recent version of the DNSTT source code.</p>
+
+<p>Download to your server the most recent source for DNSTT:</p>
+
+<p><code>sudo apt install -y git</code></p>
+
+<p><code>git clone https://www.bamsoftware.com/git/dnstt.git</code></p>
+
+<p>Change into the source code directory for <code>dnstt-server</code>:</p>
+
+<p><code>cd dnstt</code></p>
+
+<p><code>cd dnstt-server</code></p>
+
+<p>Build the Go program for <code>dnstt-server</code>:</p>
+
+<p><code>go build</code></p>
+
+<p>You will see output that looks something like this:</p>
+
+<pre>go: downloading github.com/xtaci/kcp-go/v5 v5.6.8
+go: downloading github.com/xtaci/smux v1.5.24
+go: downloading github.com/klauspost/reedsolomon v1.12.0
+go: downloading github.com/pkg/errors v0.9.1
+go: downloading github.com/templexxx/xorsimd v0.4.2
+go: downloading github.com/tjfoc/gmsm v1.4.1
+go: downloading golang.org/x/crypto v0.21.0
+go: downloading golang.org/x/net v0.23.0
+go: downloading github.com/flynn/noise v1.0.0
+go: downloading github.com/klauspost/cpuid/v2 v2.2.6
+go: downloading github.com/templexxx/cpu v0.1.0
+go: downloading golang.org/x/sys v0.18.0</pre>
+
+<p>After a few minutes, the build completes without errors.</p>
+
+
+<h2>5. Run DNSTT on server</h2>
+
+<p>Create a new screen session named <code>dnstt-server</code>:</p>
+
+<p><code>screen -S dnstt-server</code></p>
+
+<p>Generate private and public keys for the end-to-end tunnel encryption:</p>
+
+<p><code>./dnstt-server -gen-key -privkey-file server.key -pubkey-file server.pub</code></p>
+
+<p>You will see feedback:</p>
+
+<pre>privkey written to server.key
+pubkey  written to server.pub</pre>
+
+<p>If you wish, you can view the contents of <code>server.pub</code>:</p>
+
+<p><code>cat server.pub</code></p>
+
+<p>You will see 64 hexadecimal characters, looking something like this:</p>
+
+<p><code>67a58d7ac70500b99c26669f7c3b56d0986e59f7da3c2b80aa7671ef79dba442</code></p>
+
+<p>Start the <code>dnstt-server</code> program running, listening on localhost port <code>udp/5300</code>, and forwarding traffic to localhost port <code>tcp/8000</code>. Replace <code>t.example.com</code> by your own domain name and issue the command:</p>
+
+<p><code>./dnstt-server -udp :5300 -privkey-file server.key t.example.com 127.0.0.1:8000</code></p>
+
+<p>You will see feedback that looks something like this:</p>
+
+<pre>pubkey 67a58d7ac70500b99c26669f7c3b56d0986e59f7da3c2b80aa7671ef79dba442
+effective MTU 932</pre>
+
+<p>Detach from the screen session by pressing the keys <strong>Ctrl</strong>+<strong>a</strong> immediately followed by <strong>d</strong>.</p>
+
+<p>You will see feedback that looks something like this:</p>
+
+<p><code>[detached from 2377.dnstt-server]</code></p>
+
+
+<h2>6. Open SOCKS listener on server</h2>
+
+<p>Make sure that password authentication is allowed (<code>PasswordAuthentication yes</code>) in both <code>/etc/ssh/sshd_config</code> and in any configuration files under <code>/etc/ssh/sshd_config.d</code>.</p>
+
+<p>Create a new screen session named <code>ssh</code>:</p>
+
+<p><code>screen -S ssh</code></p>
+
+<p>A moment ago, you started the <code>dnstt-server</code> program to forward incoming connections to port <code>tcp/8000</code>.</p> 
+
+<p>Now make a localhost SSH connection, using the <code>-D</code> switch (dynamic port forwarding), to open a SOCKS listener on port <code>tcp/8000</code>:</p>
+
+<p><code>ssh -N -D 127.0.0.1:8000 -o NoHostAuthenticationForLocalhost=yes 127.0.0.1</code></p>
+
+<p>Enter the password for your user on this server.</p> 
+
+<p>Detach from the screen session by pressing the keys <strong>Ctrl</strong>+<strong>a</strong> immediately followed by <strong>d</strong>.</p>
+
+<p>You will see feedback that looks something like this:</p>
+
+<p><code>[detached from 2389.ssh]</code></p>
+
+
+<h2>7. Copy public key to client</h2>
+
+<p>Now you must copy the public key file <code>server.pub</code> from the server to your client.</p>
+
+<p>There are many ways to do this. One example would be to <code>exit</code> your SSH session:
+
+<p><code>exit</code></p>
+
+<p>Then use the <code>scp</code> command on your workstation. For example:</p>
+
+<p><code>scp youruserid@tns.example.com:dnstt/dnstt-server/server.pub Downloads</code></p>
+
+<p>Since this is a public key, it does not need to be kept private or copied securely.</p>
+
+<p>Instead of physically transferring the file, you could alternatively paste its contents (64 hexadecimal characters) into an email and recreate the file <code>server.pub</code> on the client end.</p>
+
+
+<h2>8. Download DNSTT client for Windows</h2>
+
+<p>Visit <a href="https://dnstt.network">https://dnstt.network</a>.</p>
+
+<p>Download the most recent Windows client Windows x64 for Intel/AMD 64-bit processors.</p>
+
+<p>Normally this will be a file named <code>dnstt-client-windows-amd64.exe</code> in your <code>Downloads</code> folder (the same folder as you put the <code>server.pub</code> file).</p>
+
+
+<h2>9. Run DNSTT on Windows client</h2>
+
+<p>Visit <a href="https://github.com/curl/curl/wiki/DNS-over-HTTPS#publicly-available-servers">https://github.com/curl/curl/wiki/DNS-over-HTTPS#publicly-available-servers</a>.</p>
+
+<p>Choose a DNS-over-HTTPS (DoH) resolver. (As explained in the developer's documentation, you could alternatively use a DNS-over-TLS resolver).</p>
+
+<p>Our example here will be <code>https://cloudflare-dns.com/dns-query</code>.</p>
+
+<p>Open a Command Prompt window and navigate to your folder <code>Downloads</code>.</p>
+        
+<p>Start <code>dnstt-client-windows-amd64.exe</code> running. It listens on localhost port <code>tcp/7000</code>. Replace <code>t.example.com</code> in the following by your actual subdomain. Also substitute in your choice of DoH resolver:</p>
+
+<p><code>.\dnstt-client-windows-amd64.exe -doh https://cloudflare-dns.com/dns-query -pubkey-file server.pub t.example.com 127.0.0.1:7000</code></p>
+
+<p>You will see messages such as:</p>
+
+<pre>uTLS fingerprint Chrome 102
+effective MTU 135
+begin session 13108795</pre>
+
+<p>Leave the Command Prompt window open with <code>dnstt-client-windows-amd64.exe</code> running in it.</p>
+
+
+<h2>10. Firefox client</h2>
+
+<p>Now you will specify a SOCKS 5 proxy for Firefox on port <code>tcp/7000</code>, which will actually send traffic through the tunnel to the SSH listener on the server.</p>
+
+<p>In Firefox, go to <strong>Settings</strong>, <strong>General</strong>, then <strong>Network settings</strong> (sometimes called <strong>Proxy settings</strong>).</p>
+
+<p>Select the radio button for <strong>Manual proxy configuration</strong>.</p>
+
+<p>Specify SOCKS Proxy <code>127.0.0.1</code> and Port <code>7000</code>.</p>
+
+<p>Select SOCKS v5.</p>
+
+<p>Check the box to proxy DNS while using SOCKS5.</p>
+
+<p>Click <strong>OK</strong>.</p>
+
+
+</body>
+</html>
+
+
