@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pingtunnel ICMP tunnel</title>
+</head>
+<body style="max-width:48em;margin:0 auto;">
+
+<p><a href="https://cmptrnb.github.io">https://cmptrnb.github.io</a></p>
+
+<h1>Pingtunnel ICMP tunnel</h1>
+<p>Pingtunnel is a last-resort tool you can try when almost all TCP/UDP traffic is blocked. It transmit packets to a proxy server using ICMP (the ping protocol). The proxy server then reconstitutes the TCP/UDP traffic and forwards it to the intended destination. This would normally be slow, but under some circumstances it can actually speed up network transmission. The server in this tutorial runs Debian or Ubuntu Linux. The client is a Windows 11 PC.</p>
+
+<h2>0. Prerequisites</h2>
+
+<p>Before you begin, you will need:</p>
+<ul>
+<li>An up-to-date Debian or Ubuntu Linux server</li>
+<li>Windows 11 PC with Mozilla Firefox browser installed</li>
+</ul>
+
+
+<h2>1. Open server firewall</h2>
+<p>Open your server firewall to accept ICMP input.</p>
+
+<h2>2. Disable system ping response</h2>
+<p>Normally a server will automatically respond to a ping echo request. You must inhibit this response.</p>
+<p>SSH into your server as <code>root</code>.</p>
+<p>Edit the system control configuration file:</p>
+<p><code>vi /etc/sysctl.d/10-noecho.conf</code></p>
+<p>Add the following line:</p>
+<p><code>net.ipv4.icmp_echo_ignore_all = 1</code></p>
+<p>Save the file.</p>
+<p>Enforce this setting immediately by issuing the command:</p>
+<p><code>sysctl -p /etc/sysctl.d/10-noecho.conf</code></p>
+
+<h2>3. Download pingtunnel for Linux</h2>
+<p>In a browser on your PC, visit the <a href="https://github.com/esrrhs/pingtunnel/releases" target="_blank">https://github.com/esrrhs/pingtunnel/releases</a> page, and determine the latest build of pingtunnel. Download <code>pingtunnel_linux64.zip</code> for that release. For example, if the build number is 233, then issue the command:</p>
+<p><code>wget https://github.com/esrrhs/pingtunnel/releases/download/master-5cd6e4ac2c40c5865e62e6d16a952a5be470a5db/pingtunnel_linux_amd64.zip</code></p>
+<p>Extract the binary from the zip file:</p>
+<p><code>apt install unzip -y</code></p>
+<p><code>unzip pingtunnel_linux_amd64.zip</code></p>
+<p>Copy the binary into a directory in your execution path:</p>
+<p><code>cp pingtunnel /usr/local/bin</code></p>
+
+<h2>4. Generate encryption password</h2>
+<p>Generate a strong password of length 192 bits (24 bytes) like with this command:</p>
+<p><code>openssl rand -base64 24</code></p>
+<p>The 24-byte key can be expressed as 32 base-64 characters. You will obtain a result that looks like this:</p>
+<p><code>39YTKYYwZn89YsHcp7LvWOS465IFNqZG</code></p>
+
+<h2>5. Create systemd service file</h2>
+<p>Create a systemd service file for Pingtunnel:</p>
+<p><code>vi /etc/systemd/system/pingtunnel.service</code></p>
+<p>Insert contents as shown below:</p>
+<p><code>[Unit]<br>
+Description=Pingtunnel Server<br>
+After=network.target<br>
+<br>
+[Service]<br>
+ExecStart=/usr/local/bin/pingtunnel -type server -encrypt aes256 -encrypt-key "39YTKYYwZn89YsHcp7LvWOS465IFNqZG"<br>
+Restart=always<br>
+RestartSec=5<br>
+<br>
+[Install]<br>
+WantedBy=multi-user.target</code></p>
+<p>Save the file.</p>
+
+<h2>6.Run pingtunnel on server</h2>
+<p>Start Pingtunnel after every reboot, and also start it right now:</p>
+<p><code>systemctl enable pingtunnel</code></p>
+<p><code>systemctl start pingtunnel</code></p>
+
+<h2>7. Check pingtunnel service</h2>
+<p>Check that Pingtunnel is active (running) and that there are no error messages:</p>
+<p><code>systemctl status pingtunnel</code></p>
+<p><code>journalctl -u pingtunnel</code></p>
+
+<h2>8. Download Windows client</h2>
+<p>In a browser on your PC, visit the <a href="https://github.com/esrrhs/pingtunnel/releases" target="_blank">https://github.com/esrrhs/pingtunnel/releases</a> page, and determine the latest build of pingtunnel.</p>
+<p>Download <code>pingtunnel_windows_amd64.zip</code> for that release. 
+<p>Once you have the zip file, unzip it to get the executable.</p>
+
+<h2>9. Add Exclusion in Windows Defender</h2>
+<p>In some Windows installations, you may need to stop Windows from automatically deleting the <code>.exe</code> file.</p>
+<ol>
+<li>Open <strong>Windows Security</strong> &gt; <strong>Virus &amp; threat protection</strong>.</li>
+<li>Under <strong>Virus &amp; threat protection settings</strong>, click <strong>Manage settings</strong>.</li>
+<li>Under <strong>Exclusions</strong>, click <strong>Add or remove exclusions</strong>.</li>
+<li>Click <strong>Add an exclusion</strong> and select the folder or the <code>.exe</code> file.</li>
+</ol>
+
+<h2>10. Run Windows Client</h2>
+<p>Open a Command Prompt window with Run as Administrator.</p>
+<p>Change into the directory with <code>pingtunnel.exe</code> in it.</p>
+<p>For example:</p>
+<p><code>cd C:\Users\your-windows-user-id\Downloads\pingtunnel_windows_amd64</code></p>
+<p>Issue the command below, replacing <code>YOUR.SERVER.IP.ADDRESS</code> and the encryption key by your actual values:</p>
+<p><code>.\pingtunnel.exe -type client -l :10808 -s YOUR.SERVER.IP.ADDRESS -sock5 1 -encrypt aes256 -encrypt-key "39YTKYYwZn89YsHcp7LvWOS465IFNqZG" -nolog 1</code></p>
+<p>Leave the window open with <code>pingtunnel.exe</code> running in it.</p>
+
+<h2>11. Configure Firefox browser</h2>
+<p>You need to configure Mozilla Firefox browser to send its requests via the SOCKS5 proxy listening on localhost port 1080.</p>
+<p>Open <strong>Settings</strong> &gt; <strong>General</strong. Scroll down to <strong>Network settings</strong> (renamed to <strong>Proxy settings</strong> in some versions of Firefox).</p>
+<p>Edit the proxy settings:</p>
+<ul>
+<li>Choose <strong>Manual proxy configuration</strong>.</li>
+<li>SOCKS Host <code>127.0.0.1</code>.</li>
+<li>Port <code>10808</code>.</li>
+<li>Select version <strong>SOCKS v5</strong>.</li>
+<li>Check <strong>Proxy DNS when using SOCKS v5</strong>.</li>
+</ul>
+
+</body>
+</html>
