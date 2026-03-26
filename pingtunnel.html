@@ -91,11 +91,17 @@ WantedBy=multi-user.target</code></p>
 <li>Click <strong>Add an exclusion</strong> and select the folder or the <code>pingtunnel.exe</code> file.</li>
 </ol>
 <p>If Windows has already deleted the <code>pingtunnel.exe</code> file, you may need to re-extract it from the zip file.</p>
+<p>Alternatively, you can restore <code>pingtunnel.exe</code> from quarantined items:</p>
+<ol>
+<li>Open <strong>Windows Security</strong> &gt; <strong>Virus &amp; threat protection</strong>.</li>
+<li>Under <strong>Current threats</strong>, select <strong>Protection history</strong>.</li>
+<li>If necessary, filter on <strong>Quarantined Items</strong>.</li>
+<li>Select <code>pingtunnel.exe</code>, and choose <strong>Restore</strong>.</li>
+</ol>
 
 <h2>10. Run Windows client</h2>
 <p>Open a Command Prompt window with Run as Administrator.</p>
-<p>Change into the directory with <code>pingtunnel.exe</code> in it.</p>
-<p>For example:</p>
+<p>Change into the directory with <code>pingtunnel.exe</code> in it. For example:</p>
 <p><code>cd C:\Users\your-windows-user-id\Downloads\pingtunnel_windows_amd64</code></p>
 <p>Issue the command below, replacing <code>YOUR.SERVER.IP.ADDRESS</code> and the encryption key by your actual values:</p>
 <p><code>.\pingtunnel.exe -type client -l :10808 -s YOUR.SERVER.IP.ADDRESS -sock5 1 -encrypt aes256 -encrypt-key "39YTKYYwZn89YsHcp7LvWOS465IFNqZG" -nolog 1</code></p>
