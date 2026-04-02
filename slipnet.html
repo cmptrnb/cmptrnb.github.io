@@ -3,22 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>dnstt-deploy</title>
+<title>dnstt-deploy, SlipNet, and Telegram</title>
 </head>
 <body style="max-width:48em;margin:0 auto;">
 
 <p><a href="https://cmptrnb.github.io">https://cmptrnb.github.io</a></p>
 
-<h1>dnstt-deploy and SlipNet</h1>
+<h1>dnstt-deploy, SlipNet, and Telegram</h1>
+
+<p>Sending and receiving Telegram messages over DNS protocol on port <code>udp/53</code> is inefficient, but it may work when all other possibilities are blocked.</p>
 
 <h2>0. Prerequisites and limitations</h2>
 
 <p>Before you begin, you will need:</p>
 <ul>
 <li>An up-to-date Ubuntu server (Debian gives error <code>Unable to locate package dante-server</code>)</li>
-<li>Android phone</li>
+<li>An Android phone</li>
 <li>A domain name that you own</li>
-<li>The IP address of a local recursive resolver that is accessible from your location, and which has access to your server's IP address</li>
+<li>The IP address of a local forwarding resolver that is accessible from your location</li>
 </ul>
 
 <h2>1. Create DNS entries</h2>
@@ -70,6 +72,8 @@
 2) SSH mode
 [QUESTION] Enter choice (1 or 2):</pre>
 
+<p>In the example in this tutorial, you would enter <code>1</code> for SOCKS proxy.</p>
+
 <p>The script opens port <code>udp/5300</code> and persists the revised <code>iptables</code> rules:</p>
 
 <pre>[INFO] Saving iptables rules...
@@ -90,7 +94,7 @@ Configuration Details:
   Listen port: 5300 (DNS traffic redirected from port 53)
 
 Public Key Content:
-757aca0f8b41c14d948e433706a2b6d2b86bf9066d452f64be349b8d1d75150e
+fbf4af4b3d3a6def51495e68925adc8ea5b8f1ae43562c0c1011d6c009414c4c
 
 Script installed at: /usr/local/bin/dnstt-deploy
 
@@ -124,11 +128,23 @@ Dante service commands:
 
 <p><code>exit</code></p>
 
-<h2>4. Install SlipNet</h2>
+
+<h2>4. Communicate details to client</h2>
+
+<p>Communicate the following information to the end-user on the client side (who may or may not be yourself):</p>
+
+<ul>
+<li>The subdomain, e.g. <code>t.example.com</code>.</li>
+<li>The public key from the server, e.g. <code>fbf4af4...</code>.</li>
+<li>The IP address of a locally accessible DNS resolver.</li>
+</ul>
+
+
+<h2>5. Install SlipNet on client</h2>
 
 <p>SlipNet is not available on any app store. Any version you find on Google Play, the Apple App Store, or any other marketplace is not published by anonvector and may be outdated, modified, or unsafe. The only official sources are the GitHub repository <a href="https://github.com/anonvector/SlipNet" target="_blank">https://github.com/anonvector/SlipNet</a> and the Telegram channel <a href="https://t.me/SlipNet_app" target="_blank">https://t.me/SlipNet_app</a>.</p>
 
-<p>It comes in these architectures:</p>
+<p>The SlipNet Android Package Kit (APK) comes in these architectures:</p>
 
 <ul>
 <li><code>arm64-v8a</code> (64-bit)</li>
@@ -139,14 +155,17 @@ Dante service commands:
 
 <img src="img/slipnet-001.png" width="360" height="780" alt="SlipNet APK architectures">
 
+<p>Install the SlipNet APK from one of the trusted sources.</p>
+
 <ol>
-<li>If you get a message to say the file may be harmful, check that your trust the source, then click <strong>Download anyway</strong>.</li>
+<li>If you get a message to say the file may be harmful, confirm that you are downloading the APK from a source you trust, then click <strong>Download anyway</strong>.</li>
 <li>If you do not currently allow apps from unknown sources, you may be prompted to you to your phone's <strong>Settings</strong>.</li>
-<li>Allow permission and then <strong>Install</strong>.</li>
+<li>Give permission to install apps from unknown sources, then press <strong>Install</strong>.</li>
 <li>SlipNet launches for the first time.</li>
 </ol>
 
-<h2>5. Add SlipNet profile</h2>
+
+<h2>6. Add SlipNet profile</h2>
 
 <p>Click the plus button to add a new profile.</p>
 
@@ -163,22 +182,44 @@ Dante service commands:
 <ol>
 <li>Enter anything you want as the profile name.</li>
 <li>Enter the subdomain, e.g. <code>t.example.com</code>.</li>
-<li>Enter the public key from the server, e.g. <code>757a...150e</code>.</li>
+<li>Enter the public key from the server, e.g. <code>fbf4af4...</code>.</li>
 <li>DNS transport is normally UDP.</li>
 <li>Enter a locally accessible DNS resolver.</li>
-<li>Connection method in this tutorial is SOCKS.</li>
+<li>The connection method in this tutorial is SOCKS.</li>
 <li>Press the check mark to save.</li>
-<li>Back on the main screen, select your new profile, and press the connect button (bottom right).</li>
+<li>Back on the main screen, select your new profile, and press the connect button (the button with the power-on icon at the bottom right of the screen).</li>
+<li>The change in color shows the profile is connected.</li>
 </ol>
 
-<h2>6. Proxy application</h2>
 
+<h2>7. Proxy Telegram</h2>
 
-<p>To be continued...</p>
+<p>It is assumed you have already installed and configured Telegram  messenger on the client device.</p>
+
+<p>Open Telegram.</p>
+
+<p>Press the gear wheel button to open your Telegram <strong>Settings</strong>.</p>
+
+<p>Select <strong>Data and Storage</strong>.</p>
+
+<p>Scroll down and press <strong>Proxy Settings</strong>.</p>
 
 <img src="img/telegram-001.png" width="360" height="780" alt="Telegram Settings for Data and Storage">
 
+<p>You are prompted for proxy details.</p>
+
 <img src="img/telegram-002.png" width="360" height="780" alt="Telegram Settings for Proxy Details">
+
+<p>Choose <strong>SOCKS5 Proxy</strong>, Server <code>127.0.0.1</code>, and Port <code>1080</code>.</p>
+
+<p>Press the check mark to save.</p>
+
+<p>Turn on <strong>Use Proxy</strong>.</p>
+
+
+<h2>8. Testing</h2>
+
+<p>Test to see if you can send and receive Telegram text-only messages.</p>
 
 
 </body>
