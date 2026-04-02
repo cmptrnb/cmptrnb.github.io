@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dnstt-deploy</title>
+</head>
+<body style="max-width:48em;margin:0 auto;">
+
+<p><a href="https://cmptrnb.github.io">https://cmptrnb.github.io</a></p>
+
+<h1>dnstt-deploy and SlipNet</h1>
+
+<h2>0. Prerequisites and limitations</h2>
+
+<p>Before you begin, you will need:</p>
+<ul>
+<li>An up-to-date Ubuntu server (Debian gives error <code>Unable to locate package dante-server</code>)</li>
+<li>Android phone</li>
+<li>A domain name that you own</li>
+<li>The IP address of a local recursive resolver that is accessible from your location, and which has access to your server's IP address</li>
+</ul>
+
+<h2>1. Create DNS entries</h2>
+
+<p>Go into your domain name registrar's configuration panel.</p>
+
+<p>Create an <code>A</code> record for your server hostname and an <code>NS</code> record for the subdomain that will be resolved at your server.</p>
+
+<table>
+<thead>
+  <tr>
+    <th>Name</th>
+    <th>Type</th>
+    <th>Value</th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td><code>tns.example.com</code></td>
+    <td><code>A</code></td>
+    <td>Your server IP address</td>
+  </tr>
+  <tr>
+    <td><code>t.example.com</code></td>
+    <td><code>NS</code></td>
+    <td><code>tns.example.com</code></td>
+  </tr>
+</tbody>
+</table>
+
+<h2>2. Download and run dnstt-deploy</h2>
+
+<p>SSH into your server as <code>root</code>. Copy and paste this command into your SSH session:</p>
+
+<p><code>bash &lt;(curl -Ls https://raw.githubusercontent.com/bugfloyd/dnstt-deploy/main/dnstt-deploy.sh)</code></p>
+
+<p>The script prompts you to enter your chosen subdomain:</p>
+
+<pre>[QUESTION] Enter the nameserver subdomain (e.g., t.example.com):</pre>
+
+<p>The script prompts you to optionally override the default maximum transmission unit (MTU). It defaults to 1,232 bytes.</p>
+
+<pre>[QUESTION] Enter MTU value (default: 1232):</pre>
+
+<p>The script prompts you to specify SOCKS mode or SSH mode.</p>
+
+<pre>Select tunnel mode:
+1) SOCKS proxy
+2) SSH mode
+[QUESTION] Enter choice (1 or 2):</pre>
+
+<p>The script opens port <code>udp/5300</code> and persists the revised <code>iptables</code> rules:</p>
+
+<pre>[INFO] Saving iptables rules...
+[INFO] IPv4 iptables rules saved to /etc/iptables/rules.v4
+[INFO] IPv6 iptables rules saved to /etc/iptables/rules.v6</pre>
+
+<p>On successful completion, the script displays feedback and instructions:</p>
+
+<pre>+================================================================================
+|                          SETUP COMPLETED SUCCESSFULLY!                        |
++================================================================================
+
+Configuration Details:
+  Nameserver subdomain: t.example.com
+  MTU: 1232
+  Tunnel mode: socks
+  Service user: dnstt
+  Listen port: 5300 (DNS traffic redirected from port 53)
+
+Public Key Content:
+757aca0f8b41c14d948e433706a2b6d2b86bf9066d452f64be349b8d1d75150e
+
+Script installed at: /usr/local/bin/dnstt-deploy
+
+Management Commands:
+  Run menu:           dnstt-deploy
+  Start service:      systemctl start dnstt-server
+  Stop service:       systemctl stop dnstt-server
+  Service status:     systemctl status dnstt-server
+  View logs:          journalctl -u dnstt-server -f
+
+SOCKS Proxy Information:
+SOCKS proxy is running on 127.0.0.1:1080
+Dante service commands:
+  Status:  systemctl status danted
+  Stop:    systemctl stop danted
+  Start:   systemctl start danted
+  Logs:    journalctl -u danted -f
+
++================================================================================</pre>
+
+<p>As indicated in the messages:<p>
+
+<ul>
+<li><code>dnstt-server</code> is now listening on port <code>udp/5300</code></li>
+<li><code>dante</code> (SOCKS proxy) is now listening on localhost port <code>tcp/1080</code></li>
+</ul>
+
+<h2>3. Exit SSH session</h2>
+
+<p>Exit your SSH session with the server:</p>
+
+<p><code>exit</code></p>
+
+<h2>4. Install SlipNet</h2>
+
+<p>SlipNet is not available on any app store. Any version you find on Google Play, the Apple App Store, or any other marketplace is not published by anonvector and may be outdated, modified, or unsafe. The only official sources are the GitHub repository <a href="https://github.com/anonvector/SlipNet" target="_blank">https://github.com/anonvector/SlipNet</a> and the Telegram channel <a href="https://t.me/SlipNet_app" target="_blank">https://t.me/SlipNet_app</a>.</p>
+
+<p>It comes in these architectures:</p>
+
+<ul>
+<li><code>arm64-v8a</code> (64-bit)</li>
+<li><code>arm64abi-v7a</code> (32-bit)</li>
+<li><code>x86-64</code> (Intel)</li>
+<li><code>universal</code> (if you do not know your phone's architecture)</li>
+</ul>
+
+<img src="img/slipnet-001.png" width="360" height="780" alt="SlipNet APK architectures">
+
+<ol>
+<li>If you get a message to say the file may be harmful, check that your trust the source, then click Download anyway.</li>
+<li>If you do not currently allow apps from unknown sources, you may be prompted to you to your phone's Settings.</li>
+<li>Allow permission and then Install.</li>
+<li>SlipNet launches for the first time.</li>
+</ol>
+
+<img src="img/slipnet-002.png" width="360" height="780" alt="SlipNet starting screen">
+
+</body>
+</html>
+
+
