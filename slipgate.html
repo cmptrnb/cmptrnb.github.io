@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SlipGate and SlipNet</title>
+</head>
+<body style="max-width:48em;margin:0 auto;">
+
+<p><a href="https://cmptrnb.github.io">https://cmptrnb.github.io</a></p>
+
+<h1>SlipGate and SlipNet</h1>
+
+<p>Sending and receiving traffic over DNS protocol on port <code>udp/53</code> is highly inefficient, but it may work when all other possibilities are blocked. This tutorial uses Telegram as an example app on the client device.</p>
+
+<h2>0. Prerequisites and limitations</h2>
+
+<p>Before you begin, you will need:</p>
+<ul>
+<li>An up-to-date Debian or Ubuntu Linux server</li>
+<li>An Android phone</li>
+<li>A domain name that you own</li>
+</ul>
+
+<h2>1. Create DNS entries</h2>
+
+<p>Go into your domain name registrar's configuration panel.</p>
+
+<p>Create an <code>A</code> record for your server hostname and an <code>NS</code> record for the subdomain that will be resolved at your server.</p>
+
+<table>
+<thead>
+  <tr>
+    <th>Name</th>
+    <th>Type</th>
+    <th>Value</th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td><code>tns.example.com</code></td>
+    <td><code>A</code></td>
+    <td>Your server IP address</td>
+  </tr>
+  <tr>
+    <td><code>t.example.com</code></td>
+    <td><code>NS</code></td>
+    <td><code>tns.example.com</code></td>
+  </tr>
+</tbody>
+</table>
+
+<h2>2. Download and install SlipGate</h2>
+
+<p>SSH into your server as <code>root</code>. Copy and paste this command into your SSH session:</p>
+
+<p><code>curl -fsSL https://raw.githubusercontent.com/anonvector/slipgate/main/install.sh | bash</code></p>
+
+<p>The script gives you options as to which transports you want to install:</p>
+
+<pre>
+  Which transports do you want to install?
+
+  Transports:
+    1) DNSTT / NoizDNS — DNS tunnel
+    2) Slipstream — QUIC DNS tunnel
+    3) VayDNS — KCP DNS tunnel
+    4) NaiveProxy — HTTPS proxy with Caddy
+    5) SSH — Direct SSH tunnel
+    6) SOCKS5 — Direct SOCKS5 proxy
+    7) All
+  Choice (comma-separated, e.g. 1,3,4):
+</pre>
+
+<p>This tutorial is as simple as possible, so enter <code>1</code> for DNSTT only.</p>
+
+<p>The script asks you which backend you want on the server for your DNSTT tunnel:</p>
+
+<pre>
+  Backend:
+    1) SOCKS — SOCKS5 proxy
+    2) SSH — SSH tunnel
+    3) Both — SOCKS5 + SSH tunnel
+  Choice [SOCKS — SOCKS5 proxy]:
+</pre>
+
+<p>This tutorial is as simple as possible, so enter <code>1</code> for SOCKS only.</p>
+
+<p>The script prompts you for the subdomain you chose for the DNS tunnel:</p>
+
+<pre>
+  Domain for dnstt/noizdns (e.g. t.example.com):
+</pre>
+
+<p>Enter your choice of subdomain.</p>
+
+<p>The script prompts you for the maximum transmission unit (MTU) you want for the DNS tunnel:</p>
+
+<pre>
+  MTU [1232]:
+</pre>
+
+<p>Press <strong>Enter</strong> to accept the default.</p>
+
+<p>The script asks you if you want to create a new user at this stage:</p>
+
+<pre>
+  Create a user now? [Y/n]:
+</pre>
+
+<p>You do not need authentication in this simple scenarios, so enter <code>n</code> for no.</p>
+
+<p>The script asks you if you want to use Cloudflare WARP:</p>
+
+<pre>
+  Enable WARP outbound (Cloudflare)? [y/N]:
+</pre>
+
+<p>This tutorial is as simple as possible, so enter <code>n</code> for no.</p>
+
+<p>At the end of its run, the script displays the client configurations:</p>
+
+<pre>
+    Client Configs:
+
+    [dnstt] (no auth)
+    slipnet://MTh8...
+
+    [noizdns] (no auth)
+    slipnet://MTh8...
+</pre>
+
+
+<h2>3. Exit SSH session</h2>
+
+<p>Exit your SSH session with the server:</p>
+
+<p><code>exit</code></p>
+
+
+<h2>4. Communicate configuration to client</h2>
+
+<p>Communicate the <code>slipnet://</code> URL to the client user (who may or may not be yourself).</p>
+
+<p>For example, depending on your environment, you could use email or you could connect your Android device to your workstation by USB cable.</p>
+
+
+<h2>5. Install SlipNet on client device</h2>
+
+<p>SlipNet is not available on any app store. Any version you find on Google Play, the Apple App Store, or any other marketplace is not published by anonvector and may be outdated, modified, or unsafe. The only official sources are the GitHub repository <a href="https://github.com/anonvector/SlipNet" target="_blank">https://github.com/anonvector/SlipNet</a> and the Telegram channel <a href="https://t.me/SlipNet_app" target="_blank">https://t.me/SlipNet_app</a>.</p>
+
+<p>The SlipNet Android Package Kit (APK) comes in these architectures:</p>
+
+<ul>
+<li><code>arm64-v8a</code> (64-bit)</li>
+<li><code>arm64abi-v7a</code> (32-bit)</li>
+<li><code>x86-64</code> (Intel)</li>
+<li><code>universal</code> (if you do not know your phone's architecture)</li>
+</ul>
+
+
+
+<p>Install the SlipNet APK from one of the trusted sources.</p>
+
+<ol>
+<li>If you get a message to say the file may be harmful, confirm that you are downloading the APK from a source you trust, then click <strong>Download anyway</strong>.</li>
+<li>If you do not currently allow apps from unknown sources, you may be prompted to adjust your phone's <strong>Settings</strong>.</li>
+<li>Give permission to install apps from unknown sources, then press <strong>Install</strong>.</li>
+<li>SlipNet launches for the first time.</li>
+</ol>
+
+
+<h2>6. Add SlipNet profile</h2>
+
+<p>Click the plus button to add a new profile.</p>
+
+<ol>
+<li>Scroll down and select <strong>Import</strong>.</li>
+<li>Choose either <strong>Paste</strong> or <strong>File</strong>, depending on how you communicated the <code>slipnet://</code> URL from the server to the client.</li>
+<li>If you are behind a restrictive firewall, edit the imported profile, and press <strong>Scan for Working Resolvers</strong>.</li>
+</ol>
+
+<h2>7. Connect client to server</h2>
+
+<p>Back on the main screen, select your new profile, and press the connect button (the button with the power-on icon at the bottom right of the screen).</p>
+
+<p>The highlights change in color to green to show the profile is connected.</p>
+
+
+
+<h2>8. Test with Telegram</h2>
+
+<p>This tutorial uses Telegram as an example app on the client device. It is assumed you have already installed and configured Telegram  messenger.</p>
+
+<p>Open Telegram.</p>
+
+<p>Test your ability to connect to Telegram chats.</p>
+
+
+
+<h2>9. Support</h2>
+
+<p>The project README for <a href="https://github.com/anonvector/SlipGate" target="_blank">SlipGate</a> and <a href="https://github.com/anonvector/SlipNet" target="_blank">SlipNet</a> contain fuller instructions than this basic tutorial.</p>
+
+<p>Need help? Check out the channel and chat group at <a href="https://t.me/SlipNet_app" target="_blank">https://t.me/SlipNet_app</a>.</p>
+
+</body>
+</html>
+
+
