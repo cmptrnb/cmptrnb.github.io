@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vercel XHTTP Relay</title>
+</head>
+<body style="max-width:48em;margin:0 auto;">
+
+<p><a href="https://cmptrnb.github.io">https://cmptrnb.github.io</a></p>
+
+<h1>Vercel XHTTP Relay</h1>
+<p><em>Translated by Google Translate from <a href="https://github.com/avaco-cloud/Vercel-XHTTP">🇮🇷 Complete Persian Setup Guide</a>.</em></p>
+
+<p><strong>Telegram Channel</strong></p>
+
+<p>📢 Avaco Cloud Telegram Channel — Join for more tutorials, updates, censorship bypass methods and new configs:</p>
+
+<p>👉 <a href="https://t.me/avaco_cloud">https://t.me/avaco_cloud</a></p>
+
+<p>A minimal relay running on Vercel Edge Functions that forwards XHTTP traffic from your Xray/V2Ray client to your backend Xray server. The goal: use Vercel's global edge network and the *.vercel.app domain as a front to hide the real IP of your origin server.</p>
+
+<h2>Table of Contents</h2>
+
+<ul>
+<li>Who is this project for?</li>
+<li>How it works (architecture)</li>
+<li>Limitations and caveats</li>
+<li>Prerequisites</li>
+<li>Step 1 — Purchase a VPS</li>
+<li>Step 2 — Set up a domain and DNS</li>
+<li>Step 3 — SSH to the VPS</li>
+<li>Step 4 — Install Xray</li>
+<li>Step 5 — Obtain a TLS Certificate</li>
+<li>Step 6 — Configure Xray with XHTTP</li>
+<li>Step 7 — Deploy to Vercel</li>
+<li>Step 8 — Configure the client</li>
+<li>Vercel limitations</li>
+<li>Troubleshooting</li>
+<li>FAQ</li>
+</ul>
+
+<h2>Who is this project for?</h2>
+
+<p>This project is only useful if you have an Xray server with XHTTP and want to mask its IP with Vercel.</p>
+
+<p>❌ It is not useful for you if:</p>
+<ul>
+<li>You just got a ready-made config (vless/vmess) from the seller</li>
+<li>Your config is WebSocket / gRPC / Reality / Trojan / TCP</li>
+<li>You want to create a proxy without a VPS only with Vercel</li>
+<li>You have heavy traffic (4K streaming, large downloads, torrents, multi-user) — because Fast Origin Transfer in Hobby ends very quickly and the account is paused</li>
+</ul>
+
+<p>✅ It is useful for you if:</p>
+<ul>
+<li>You have or want to get a VPS</li>
+<li>You want to set the transport to XHTTP</li>
+<li>You want your server IP to remain hidden</li>
+<li>You are using personal and light usage (chat, web browsing, video up to 1080p, music)</li>
+<li>Or you are ready to get a Pro plan for heavy traffic</li>
+</ul>
+
+<h2>How it works (architecture)</h2>
+
+<pre>
++-----------+                       +-------------+           +---------------+
+| Client    | TLS, SNI=vercel.com   | Vercel Edge | HTTP/2    | Xray server   |
+| (v2rayN/  +---------------------->| (relay)     +---------->| XHTTP inbound |
+| Hiddify)  |  XHTTP request        |             | forward   |               |
++-----------+                       +-------------+           +---------------+
+</pre>
+
+<p>The client connects to the Vercel domain with SNI=vercel.com. To the censor, it looks like normal Vercel traffic.
+The Vercel Edge Function forwards the request body to the Xray server without buffering.
+The response is streamed back in the same way.</p>
+
+<h2>Limitations and Warnings</h2>
+
+<p>🔴 Important Warning — Fast Origin Transfer: In the Hobby plan, each byte of traffic is counted twice (once client↔Vercel and once Vercel↔server). If the quota is reached, Vercel will pause your account, users will no longer be able to connect and you will have to wait 30 days or purchase Pro. Details in Vercel Limitations section.</p>
+
+<p>⚠️ XHTTP only: WebSocket, gRPC, TCP, mKCP, QUIC and Reality do not work on Vercel Edge (runtime limitation).</p>
+
+<p>⚠️ Vercel TOS: Using a proxy may violate the TOS. If traffic is high, your account may be suspended. Keep traffic balanced.</p>
+
+<p>⚠️ Educational: This repo is for personal training and testing, not production. No SLA or support.</p>
+
+<h3>💡 Sustainable Usage Tips</h3>
+
+<p>To avoid disconnection in the middle of the month:</p>
+
+<ul>
+<li>📊 Check Dashboard → Usage weekly (Vercel sends emails at 80% and 100%)</li>
+<li>🔄 Create a few Hobby projects with multiple Gmail accounts and set up Load Balance / Failover in the client</li>
+<li>⏸ Exclude 4K videos and large downloads from the proxy (directly or from another proxy)</li>
+<li>💳 If you have a lot of traffic, go Pro ($20/month) and set a spending cap with Spend Management</li>
+</ul>
+
+<h2>Prerequisites</h2>
+
+<h3>Items to explain</h3>
+
+<ul>
+<li>VPS A Linux server outside of Iran with a public IP (preferably Ubuntu 22.04 or 24.04)</li>
+<li>A domain (paid or free like DuckDNS) with an A record pointing to the server IP</li>
+<li>Free Vercel account from vercel.com</li>
+<li>Node.js + npm on local system for Vercel CLI (you can also deploy from dashboard)</li>
+<li>Optional GitHub account, if using Dashboard method You are using</li>
+</ul>
+
+<h3>Tools required by operating system</h3>
+
+<p>This guide is written for both Windows and Mac/Linux. At each step you will see the equivalent commands depending on your OS.</p>
+
+<h4>🪟 Windows (Windows 10/11)</h4>
+
+<p>All of the following tools are free:
+<ul>
+<li>PowerShell is pre-installed (search in Start menu) Run commands</li>
+<li>OpenSSH Client is pre-installed in Win10/11 (Guide) SSH connection</li>
+<li>Git for Windows git-scm.com/download/win git + Git Bash</li>
+<li>Node.js LTS nodejs.org — download installer and Next-Next-Finish for Vercel CLI</li>
+<li>PuTTY (optional) putty.org Replaces SSH with GUI</li>
+</ul>
+
+<p>💡 Recommendation: After installing Git for Windows, use Git Bash, as Unix commands (like curl, ssh, cat) work naturally inside it. It makes this guide easier.</p>
+
+<h4>🍎 Mac / 🐧 Linux</h4>
+
+<ul>
+<li>Terminal pre-installed</li>
+<li>ssh, curl, dig pre-installed</li>
+<li>Homebrew (Mac) /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</li>
+<li>Node.js brew install node (Mac) or apt install nodejs npm (Linux)</li>
+<li>Git brew install git (Mac) or apt install git (Linux)</li>
+</ul>
+
+<h2>Step 1 — Buy ​​a VPS</h2>
+
+<h3>Recommendations</h3>
+<ul>
+<li>Hetzner ~€4.5 Frankfurt / Helsinki</li>
+<li>Contabo ~$4.5 EU / US</li>
+<li>Vultr $5-6 EU / US</li>
+<li>DigitalOcean $6 Various</li>
+</ul>
+
+<h3>Minimum specifications</h3>
+<ul>
+<li>RAM: 1 GB</li>
+<li>CPU: 1 vCPU</li>
+<li>Disk: 20 GB SSD</li>
+<li>Bandwidth: at least 1 TB/month</li>
+<li>OS: Ubuntu 22.04 or 24.04</li>
+</ul>
+
+<h3>After purchase</h3>
+<p>Note the public IP and the SSH password from the dashboard.</p>
+
+<h2>Step 2 — Set up your domain and DNS</h2>
+
+<p>If you don’t have a domain:</p>
+<ul>
+<li>Paid: Namecheap, Porkbun, Cloudflare Registrar</li>
+<li>Free: DuckDNS</li>
+</ul>
+
+<p>Set up an A Record (on Cloudflare):</p>
+
+<ol>
+<li>Go to dash.cloudflare.com</li>
+<li>Click on your domain → DNS menu → Records</li>
+<li>Add record:
+<ul>
+<li>Type A</li>
+<li>Name xray (or whatever you want — it can be xray.yourdomain.com)</li>
+<li>IPv4 address Public IP of your VPS (e.g. 203.0.113.45)</li>
+<li>Proxy status ⚫ DNS only (gray, not orange)</li>
+<li>TTL Auto</li>
+</ul></li>
+</ol>
+
+<p>🔴 Proxy status must be DNS only. If you set it to Proxied, Cloudflare will get caught in the middle of the traffic and won’t work.</p>
+
+<h3>DNS Test</h3>
+
+<p>🍎 Mac / 🐧 Linux:</p>
+
+<p><code>dig @8.8.8.8 xray.yourdomain.com +short</code></p>
+
+<p>🪟 Windows (PowerShell):</p>
+
+<p><code>Resolve-DnsName xray.yourdomain.com -Server 8.8.8.8 -Type A</code></p>
+
+<p>Or with nslookup:</p>
+
+<p><code>nslookup xray.yourdomain.com 8.8.8.8</code></p>
+
+<p>🪟 Windows (Git Bash):</p>
+
+<p><code>nslookup xray.yourdomain.com 8.8.8.8</code></p>
+
+<p>It should return your server IP. This may take 1-5 minutes.</p>
+
+<h2>Step 3 — SSH to VPS</h2>
+
+<p>🍎 Mac / 🐧 Linux / 🪟 Windows (PowerShell or Git Bash)</p>
+
+<p><code>ssh root@YOUR_VPS_IP</code></p>
+
+<p>First type yes. Enter the password (it won't show as you type — this is normal).</p>
+
+<p>🪟 Windows with PuTTY (if CLI is difficult)</p>
+
+<ol>
+<li>Open PuTTY</li>
+<li>Host Name (or IP address): YOUR_VPS_IP</li>
+<li>Port: 22</li>
+<li>Connection type: SSH</li>
+<li>Click Open</li>
+<li>Click Accept the first time</li>
+<li>login: root + Enter, enter password</li>
+</ol>
+
+<p>💡 After this step, all commands starting with # (or root@vps:~#) will be executed inside the SSH server — it doesn't matter if you're connecting from Mac or Windows.</p>
+
+<p>Check OS:</p>
+
+<p><code>cat /etc/os-release</code></p>
+
+<p>You should see Ubuntu 22.04 or 24.04.</p>
+
+<h2>Step 4 — Install Xray</h2>
+
+<p>Update the system and install packages:</p>
+
+<p><code>apt update &amp;&amp; apt upgrade -y</code></p>
+
+<p><code>apt install -y curl socat cron ufw</code></p>
+
+<p>Install Xray with the official script:</p>
+
+<p><code>bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install</code></p>
+
+<p>After a few seconds:</p>
+
+<p><code>info: Xray vXX.X.X is installed</code></p>
+
+<p>Check version:</p>
+
+<p><code>xray version</code></p>
+
+<p>⚠️ The version must be at least v1.8.16 (for XHTTP). Newer versions (like 26.x) are better.</p>
+
+<p>Generate UUID:</p>
+
+<p><code>xray uuid</code></p>
+
+<p>Output like:</p>
+
+<p><code>xxxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</code></p>
+
+<p>Save this UUID — you will need it later in the server and client config.</p>
+
+Enable the service
+
+<p><code>systemctl enable xray</code></p>
+
+<p>Firewall configuration:</p>
+
+<p><code>ufw allow 22/tcp   # SSH</code></p>
+
+<p><code>ufw allow 80/tcp   # for issuing cert</code></p>
+
+<p><code>ufw allow 443/tcp  # for future</code></p>
+<p><code>ufw allow 2096/tcp # our Xray port</code></p>
+<p><code>ufw --force enable</code></p>
+<p><code>ufw status</code></p>
+
+<p>⚠️ Before ufw --force enable, make sure port 22 is allowed, otherwise SSH connection will be dropped.</p>
+
+<h2>Step 5 — Get TLS Certificate</h2>
+
+<p>We will use acme.sh + Let's Encrypt (free, automatic).</p>
+
+<p>Install acme.sh:</p>
+
+<p><code>curl https://get.acme.sh | sh -s email=your@email.com</code></p>
+
+<p><code>source ~/.bashrc</code></p>
+
+<p>Set the default CA:</p>
+
+<p><code>~/.acme.sh/acme.sh --set-default-ca --server letsencrypt</code></p>
+
+<p>Make sure port 80 is free:</p>
+
+<p><code>ss -tlnp | grep :80</code></p>
+
+<p>If there is anything listening (like apache or nginx), stop it:</p>
+
+<p><code>systemctl stop apache2 2&gt;/dev/null</code></p>
+
+<p><code>systemctl disable apache2 2&gt;/dev/null</code></p>
+
+<p><code>systemctl stop nginx 2&gt;/dev/null</code></p>
+
+<p>Issue a certificate:</p>
+
+<p><code>~/.acme.sh/acme.sh --issue -d xray.yourdomain.com --standalone -k ec-256</code></p>
+
+<p>Replace xray.yourdomain.com with your actual domain.</p>
+
+<p>Successful output:</p>
+
+<p><code>Cert success.<br>
+Your cert is in: /root/.acme.sh/xray.yourdomain.com_ecc/...</code></p>
+
+<p>Install cert in Xray path:</p>
+
+<p><code>mkdir -p /etc/xray</code></p>
+
+<p><code>~/.acme.sh/acme.sh --install-cert -d xray.yourdomain.com --ecc --fullchain-file /etc/xray/cert.pem --key-file /etc/xray/key.pem --reloadcmd "systemctl restart xray"</code></p>
+
+<p><code>chown -R nobody:nogroup /etc/xray</code></p>
+
+<p><code>chmod 644 /etc/xray/cert.pem</code></p>
+
+<p><code>chmod 640 /etc/xray/key.pem</code></p>
+
+<p><code>ls -la /etc/xray/</code></p>
+
+<p>You should see cert.pem and key.pem.</p>
+
+<h2>Step 6 — Configure Xray with XHTTP</h2>
+
+<p>Prepare Logs:</p>
+
+<p><code>mkdir -p /var/log/xray</code></p>
+
+<p><code>touch /var/log/xray/access.log /var/log/xray/error.log</code></p>
+
+<p><code>chown -R nobody:nogroup /var/log/xray</code></p>
+<p><code>cp /usr/local/etc/xray/config.json /usr/local/etc/xray/config.json.bak 2>/dev/null || true</code></p>
+
+<p>Write config:</p>
+
+<p>📝 Before pasting, keep these values ​​in mind:</p>
+
+<ul>
+<li>YOUR-UUID-HERE → UUID you got from xray uuid</li>
+<li>xray.yourdomain.com → your actual domain</li>
+<li>/yourpath → a path of your choice (e.g. /myapppath)</li>
+</ul>
+
+<pre>
+cat &gt; /usr/local/etc/xray/config.json &lt;&lt; 'EOF'
+{
+  "log": {
+    "loglevel": "warning",
+    "access": "/var/log/xray/access.log",
+    "error": "/var/log/xray/error.log"
+  },
+  "inbounds": [
+    {
+      "tag": "xhttp-in",
+      "listen": "0.0.0.0",
+      "port": 2096,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "YOUR-UUID-HERE",
+            "flow": ""
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "tls",
+        "tlsSettings": {
+          "alpn": [
+            "h2",
+            "http/1.1"
+          ],
+          "certificates": [
+            {
+              "certificateFile": "/etc/xray/cert.pem",
+              "keyFile": "/etc/xray/key.pem"
+            }
+          ]
+        },
+        "xhttpSettings": {
+          "path": "/yourpath",
+          "host": "xray.yourdomain.com",
+          "mode": "auto"
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "blocked"
+    }
+  ]
+}
+EOF
+</pre>
+
+<p>⚠️ After pasting, open the file with:</p>
+
+<p><code>nano /usr/local/etc/xray/config.json</code></p>
+
+<p>Open it and replace the three values ​​YOUR-UUID-HERE, /yourpath, xray.yourdomain.com with the actual values.</p>
+
+<p>Test the config syntax:</p>
+
+<p><code>xray -test -config /usr/local/etc/xray/config.json</code></p>
+
+<p>You should see: Configuration OK.</p>
+
+<p>Start Xray:</p>
+
+<p><code>systemctl restart xray</code></p>
+
+<p><code>systemctl status xray --no-pager</code></p>
+
+<p><code>ss -tlnp | grep 2096</code></p>
+
+<p>Test locally:</p>
+
+<p><code>curl -vk https://127.0.0.1:2096/yourpath</code></p>
+
+<p>If you get an HTTP/2 404 → Great! (404 is normal because you didn't send a UUID, which means Xray is working.)</p>
+
+<h2>Step 7 — Deploy to Vercel</h2>
+
+<p>Two ways: CLI (faster) or Dashboard (with GitHub).</p>
+
+<h3>Method A: Vercel CLI</h3>
+
+<p>Install Node.js and Vercel CLI</p>
+
+<p>🍎 Mac:</p>
+
+<p><code># If you don't have Homebrew<br>
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"</code></p>
+
+<p><code>brew install node</code></p>
+<p><code>sudo npm i -g vercel</code></p>
+<p><code>vercel --version</code></p>
+
+<p>🐧 Linux (Ubuntu/Debian):</p>
+
+<p><code>sudo apt update</code></p>
+<p><code>sudo apt install -y nodejs npm</code></p>
+<p><code>sudo npm i -g vercel</code></p>
+<p><code>vercel --version</code></p>
+
+<p>🪟 Windows:</p>
+
+<p>Install Node.js:
+<ol>
+<li>Go to nodejs.org</li>
+<li>Download the LTS version (.msi file)</li>
+<li>Double-click, Next until Finish</li>
+<li>Make sure Add to PATH is checked</li>
+</ol>
+
+<p>Install Vercel CLI (in PowerShell or Git Bash):</p>
+
+<p><code>npm i -g vercel</code></p>
+<p><code>vercel --version</code></p>
+
+<p>If it gives a permission error, open PowerShell As Administrator and try again.</p>
+
+<h4>Login to Vercel</h4>
+
+<p>On any operating system:</p>
+
+<p><code>vercel login</code></p>
+
+<p>Select Continue with Email with the arrow, enter your email, click the confirmation link.</p>
+
+<h4>Initial Deploy</h4>
+
+<p>🍎 Mac / 🐧 Linux / 🪟 Git Bash:</p>
+
+<p><code>git clone https://github.com/YOUR-USERNAME/vercel-xhttp-relay.git</code></p>
+<p><code>cd vercel-xhttp-relay</code></p>
+<p><code>vercel</code></p>
+
+<p>🪟 Windows PowerShell:</p>
+
+<p><code>git clone https://github.com/YOUR-USERNAME/vercel-xhttp-relay.git</code></p>
+<p><code>cd vercel-xhttp-relay</code></p>
+<p><code>vercel</code></p>
+
+<p>Questions:</p>
+<ul>
+<li>Set up and deploy? → Y</li>
+<li>Link to existing project? → N</li>
+<li>Project name? → Custom name</li>
+<li>Override settings? → N</li>
+</ul>
+
+<p>Set Environment Variable</p>
+
+<p><code>vercel env add TARGET_DOMAIN</code></p>
+
+<ul>
+<li>Value: https://xray.yourdomain.com:2096</li>
+<li>Environments: Only check Production and Preview with Space (don't check Development)</li>
+<li>Git branch: Empty Enter</li>
+<li>Make sensitive: n</li>
+</ul>
+
+<h4>Final Deploy</h4>
+
+<p><code>vercel --prod</code></p>
+
+<p>You will get a URL like https://your-project.vercel.app.</p>
+
+
+<h3>Method B: Dashboard (with GitHub)</h3>
+
+<ol>
+<li>Fork or clone this project's repo and push it to your GitHub.</li>
+<li>Import the repo at vercel.com/new.</li>
+<li>On the Settings page, Environment Variables section:</li>
+<li>TARGET_DOMAIN = https://xray.yourdomain.com:2096</li>
+<li>Deploy.</li>
+</ol>
+
+<h3>Disabling Deployment Protection</h3>
+
+<p>If you enabled Vercel Authentication during setup, you need to disable it or relay won't work:</p>
+<ol>
+<li>Vercel Dashboard → Project → Settings → Deployment Protection</li>
+<li>Set Vercel Authentication to Disabled</li>
+<li>Save</li>
+</ol>
+
+<h3>Test relay</h3>
+
+<p>🍎 Mac / 🐧 Linux / 🪟 Git Bash / 🪟 PowerShell (Win 10+):</p>
+
+<p><code>curl -I https://your-project.vercel.app/yourpath</code></p>
+
+<p>🪟 Windows PowerShell (native version):</p>
+
+<p><code>Invoke-WebRequest -Uri "https://your-project.vercel.app/yourpath" -Method Head</code></p>
+
+<p>💡 On Windows 10+, curl.exe is installed and working.</p>
+
+<p>Output Meaning</p>
+<ul>
+<li>HTTP/2 404 ✅ Everything is OK</li>
+<li>HTTP/2 401 + HTML login Deployment Protection is on</li>
+<li>HTTP/2 500 env var not set</li>
+<li>HTTP/2 502 TARGET_DOMAIN is wrong</li>
+</ul>
+
+<h2>Step 8 — Configure the client</h2>
+
+<h3>Configuration values</h3>
+<ul>
+<li>UUID: Your UUID</li>
+<li>Address: vercel.com</li>
+<li>Port: 443</li>
+<li>SNI: vercel.com</li>
+<li>Type: xhttp</li>
+<li>Path: /yourpath</li>
+<li>Host: your-project.vercel.app</li>
+<li>Mode: auto</li>
+<li>TLS: on</li>
+<li>ALPN: h2</li>
+<li>Fingerprint: chrome</li>
+</ul>
+
+<h3>VLESS share link</h3>
+
+<p><code>vless://YOUR-UUID@vercel.com:443?encryption=none&security=tls&sni=vercel.com&alpn=h2&fp=chrome&type=xhttp&path=%2Fyourpath&host=your-project.vercel.app&mode=auto#Vercel-Relay</code></p>
+
+<p>Note: Replace / in path with %2F encode.</p>
+
+<h3>Recommended Clients</h3>
+
+<ul>
+<li>Windows v2rayN (v6.45+)</li>
+<li>Android v2rayNG, Hiddify</li>
+<li>iOS V2Box, Streisand</li>
+<li>macOS V2Box, Hiddify</li>
+<li>Linux Hiddify, xray-core</li>
+</ul>
+
+<h3>Configuration Tips</h3>
+
+<ul>
+<li>Core: Must be Xray-core (not V2Ray-core, as V2Ray does not support XHTTP)</li>
+<li>Mux: Off</li>
+<li>Routing: Turn on Bypass LAN/Iran</li>
+<li>Allow Insecure: OFF</li>
+</ul>
+
+<h3>Test after connection</h3>
+
+<p>Go to browser:</p>
+
+<p><a href="https://ifconfig.me">https://ifconfig.me</a></p>
+
+<p>It should show your VPS server IP, not Iran IP.</p>
+
+
+<h2>Vercel Limitations</h2>
+
+<p>⚠️ These numbers are from the official Vercel documentation at the time of writing this README. They may have changed — check vercel.com/pricing and vercel.com/docs/limits for the latest updates.</p>
+
+<p>General Numbers</p>
+
+<ul>
+<li>Limits Hobby (Free) Pro</li>
+<li>Fast Data Transfer (Client ↔ Vercel) 100 GB / month 1 TB / month</li>
+<li>Fast Origin Transfer (Vercel ↔ Backend) Limited (Important for relay!) ~10× Hobby</li>
+<li>Edge Requests 1M / month 10M / month</li>
+<li>Active CPU Time 4 hours / month 40 hours / month</li>
+<li>Start Response (Edge) 25 seconds 25 seconds</li>
+<li>Maximum Streaming Duration 300 seconds (5 minutes) 300 seconds</li>
+</ul>
+
+<p>🔴 Very important point: Fast Origin Transfer</p>
+
+<p>For proxy/relay use this is more critical than Fast Data Transfer!</p>
+
+<p>Every byte of your traffic is counted twice.</p>
+
+<p>If Fast Origin Transfer reaches its limit, your Hobby account will be paused and you will have to wait 30 days or upgrade</p>
+
+<p>📚 Fast Origin Transfer documentation</p>
+
+<p>Hobby usage estimates (conservative)</p>
+
+<p>Considering both Fast Data and Fast Origin:</p>
+<ul>
+<li>Chat / Telegram / WhatsApp virtually unlimited</li>
+<li>Stream music (Spotify) virtually unlimited</li>
+<li>Normal web browsing virtually unlimited</li>
+<li>YouTube 720p ~50 hours / month</li>
+<li>YouTube 1080p ~20-30 hours / month</li>
+<li>YouTube 4K / heavy downloads ~7 hours / month</li>
+</ul>
+
+<p>💡 For everyday use (chat, browsing, music, 720p video) Hobby is more than enough. For 4K streaming or heavy downloads, either go Pro or create several Hobby projects and load balance between them.</p>
+
+
+<h2>Troubleshooting</h2>
+
+<h3>502 Bad Gateway: Tunnel Failed</h3>
+
+<p>Vercel cannot reach the backend server. Check:</p>
+<ul>
+<li>TARGET_DOMAIN is exactly correct (https://...:port)</li>
+<li>Xray is up on the server: systemctl status xray</li>
+<li>Port is open in firewall: ufw status</li>
+</ul>
+
+<h3>500 Misconfigured: TARGET_DOMAIN is not set</h3>
+
+<p>Env var not set or redeployed. Run:</p>
+
+<p><code>vercel env ls</code></p>
+
+<p><code>vercel --prod</code></p>
+
+<h3>401 Unauthorized with HTML login</h3>
+
+<p>Vercel Authentication is enabled. In Dashboard → Settings → Deployment Protection → Disabled.</p>
+
+<h3>Client connects but traffic is not passed</h3>
+
+<ul>
+<li>Disable Mux</li>
+<li>Set Core to Xray-core</li>
+<li>Enable Routing → Bypass Iran</li>
+</ul>
+
+<h3>TLS handshake error on client</h3>
+
+<p>Change SNI from vercel.com to your-project.vercel.app</p>
+
+<p>Set ALPN to h2 only</p>
+
+<h3>Client only works on Wi-Fi, not mobile data</h3>
+
+<p>Mobile ISP may bottleneck *.vercel.app. Connect a Custom Domain to Vercel (Settings → Domains).</p>
+
+<h3>Configuration OK but Xray crashes</h3>
+
+<p>See error log:</p>
+
+<p><code>tail -50 /var/log/xray/error.log</code></p>
+
+<p>Usually cert/key file access problem. Fix with:</p>
+
+<p><code>chown -R nobody:nogroup /etc/xray /var/log/xray</code></p>
+
+
+<h2>FAQ</h2>
+
+<h3>Can I do this with Cloudflare instead of Vercel?</h3>
+
+<p>Yes, but with different code (Cloudflare Workers). For WebSocket, Cloudflare Workers is better. For XHTTP, Vercel is more stable because of streaming WebStreams.</p>
+
+<h3>What if *.vercel.app is filtered in Iran?</h3>
+
+<p>Connect a personal domain to Vercel (Settings → Domains → Add). Then leave the host and address the same in the client.</p>
+
+<h3>How many users can connect at the same time?</h3>
+
+<p>There is no hard limit, but create a separate UUID for each user:</p>
+
+<pre>
+        "clients": [
+          { "id": "uuid-1", "email": "user1@example.com" },
+          { "id": "uuid-2", "email": "user2@example.com" }
+        ]
+</pre>
+
+<h3>Can I change port 2096?</h3>
+
+<p>Yes. Put the desired port in config.json, allow in ufw, and set the same port in TARGET_DOMAIN in Vercel.</p>
+
+<h3>How to see Vercel logs?</h3>
+
+<p><code>vercel logs --follow</code></p>
+
+<p>Or in Dashboard → Project → Logs.</p>
+
+<h3>What should I do after changing Xray configuration?</h3>
+
+<p><code>xray -test -config /usr/local/etc/xray/config.json</code></p>
+
+<p><code>systemctl restart xray</code></p>
+
+<h3>Certificate is automatically renewed?</h3>
+
+<p>Yes. acme.sh creates a cron job and automatically renews every 60 days. You can test manually:</p>
+
+<p><code>~/.acme.sh/acme.sh --renew -d xray.yourdomain.com --force --ecc</code></p>
+
+<h3>License</h3>
+
+<p>MIT — same as the original project.</p>
+
+<h3>Disclaimer</h3>
+
+<p>This project is for personal training and testing. Use at your own risk. Follow the laws of your country and Vercel's TOS.</p>
+
+<h3>📢 Contact Us</h3>
+
+<p>If this guide was useful to you, or you have questions/suggestions, get in touch via the Telegram channel:</p>
+
+<h3>Join Telegram</h3>
+
+<p><a href="https://t.me/avaco_cloud">https://t.me/avaco_cloud</a></p>
+
+<p>More tutorials • Update configs • Ways to bypass censorship • Support</p>
+
+<p>⭐ If you found the project useful, leave a Star so it can be seen more.</p>
+
+</body>
+</html>
+
+
