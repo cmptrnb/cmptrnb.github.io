@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VayDNS manual install</title>
+</head>
+<body style="max-width:48em;margin:0 auto;">
+
+<p><a href="https://cmptrnb.github.io">https://cmptrnb.github.io</a></p>
+
+<h1>VayDNS manual install</h1>
+
+<p>After running into problems installing VayDNS using multi-tunnel scripts, I decided to install and configure VayDNS manually.</p>
+
+
+<h2>0. Prerequisites</h2>
+
+<p>This page assumes you have:</p>
+<ul>
+<li>A Debian or Ubuntu Linux VPS</li>
+<li>A domain name that you own</li>
+<li>An Android phone</li>
+<li>Optionally a laptop or desktop computer running Windows</li>
+</ul>
+
+<p>To avoid conflicts over the use of port <code>udp/53</code>, it is best <em>not</em> to use <code>systemd-resolved</code>. If <code>systemd-resolved</code> is running, you could start with <code>systemctl disable --now systemd-resolved</code> then add <code>nameserver 1.1.1.1</code> to <code>/etc/resolv.conf</code>. However, some VPS providers set up their servers in such a way that <code>/etc/resolv.conf</code> gets overwritten. You will have to investigate how to prevent this, as the procedure varies from provider to provider.</p>
+
+<h2>1. Create DNS entries</h2>
+
+<p>Go into your domain name registrar's configuration panel (or your Cloudflare configuration panel, if you have specified that Cloudflare will handle your DNS records).</p>
+
+<p>Create an <code>A</code> record for your server hostname and an <code>NS</code> record for the subdomain that will be resolved at your server.</p>
+
+<table>
+<thead>
+  <tr>
+    <th>Name</th>
+    <th>Type</th>
+    <th>Value</th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td><code>ns.example.com</code></td>
+    <td><code>A</code></td>
+    <td>Your server IP address</td>
+  </tr>
+  <tr>
+    <td><code>v.example.com</code></td>
+    <td><code>NS</code></td>
+    <td><code>ns.example.com</code></td>
+  </tr>
+</tbody>
+</table>
+
+<p>(On Cloudflare, specify DNS services only, and not proxying.)</p>
+
+
+<h2>2. Open firewall</h2>
+
+<p>How you open the firewall depends on what firewall you are using (security groups, <code>iptables</code>, <code>ufw</code>, <code>firewall-cmd</code>, etc.). However you built your firewall, you need to open it for input on port <code>udp/5300</code>. (We use port <code>udp/5300</code> to avoid having to bind to a privileged port.)</p>
+
+<p>If you are using <code>iptables</code>, SSH into your server as <code>root</code>, then issue the command:</p>
+
+<p><code>iptables -I INPUT -p udp --dport 5300 -j ACCEPT</code></p>
+
+<p>Redirect port <code>udp/53</code> to <code>udp/5300</code>:</p>
+
+<p><code>iptables -t nat -I PREROUTING -i eth0 -p udp --dport 53 -j REDIRECT --to-ports 5300</code></p>
+
+<p>You also need to persist your firewall rules across reboots. For example, if you have previously installed <code>iptables-persisent</code> on your VPS:</p>
+
+<p><code>dpkg-reconfigure iptables-persistent</code></p>
+
+
+<h2>3. Install, configure, and run SOCKS proxy</h2>
+
+<p>Update your existing server packages, and install <code>microsocks</code>:</p>
+
+<p><code>apt update &amp;&amp; apt upgrade -y</code></p>
+
+<p><code>apt install -y microsocks</code></p>
+
+<p>Create a systemd service file for <code>microsocks</code>:</p>
+
+<p><code>vi /etc/systemd/system/microsocks.service</code></p>
+
+<p>Insert contents like this:</p>
+
+<pre>
+Description=MicroSocks SOCKS5 Server
+After=network.target
+
+[Service]
+User=nobody
+Group=nogroup
+ExecStart=/usr/bin/microsocks -i 127.0.0.1 -p 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+</pre>
+
+<p>Save the file.</p>
+
+<p>Start the <code>microsocks</code> service:</p>
+
+<p><code>systemctl daemon-reload</code></p>
+
+<p><code>systemctl enable microsocks</code></p>
+
+<p><code>systemctl start microsocks</code></p>
+
+
+
+<h2>4. Install VayDNS on server</h2>
+
+<p>Download the server binary from GitHub. For example, if the most recent release is <code>v0.2.8</code>:</p>
+
+<p><code>wget https://github.com/net2share/vaydns/releases/download/v0.2.8/vaydns-server-linux-amd64</code></p>
+
+<p>Copy the binary into directory in your execution path:</p>
+
+<p><code>cp vaydns-server-linux-amd64 /usr/local/bin/vaydns-server</code></p>
+
+<p><code>chmod +x /usr/local/bin/vaydns-server</code></p>
+
+
+<h2>5. Create user</h2>
+<p><code>adduser vaydns</code></p>
+<p>The resulting dialog will look like this:</p>
+<pre>
+New password:
+Retype new password:
+passwd: password updated successfully
+Changing the user information for vaydns
+Enter the new value, or press ENTER for the default
+        Full Name []:
+        Room Number []:
+        Work Phone []:
+        Home Phone []:
+        Other []:
+Is the information correct? [Y/n]
+</pre>
+
+
+<h2>6. Create keys</h2>
+
+<p>Create a directory to hold the keys:</p>
+
+<p><code>mkdir /etc/vaydns</code></p>
+
+<p>Generate public-private key pair:</p>
+
+<p><code>vaydns-server -gen-key -privkey-file /etc/vaydns/server.key -pubkey-file /etc/vaydns/server.pub</code></p>
+
+<p>Result:</p>
+
+<pre>
+privkey written to /etc/vaydns/server.key
+pubkey  written to /etc/vaydns/server.pub
+</pre>
+
+<p>Change owner and group to be the <code>vaydns</code> user:</p>
+
+<p><code>chown vaydns /etc/vaydns/server.*</code></p>
+
+<p><code>chgrp vaydns /etc/vaydns/server.*</code></p>
+
+<h2>7. Create systemd service unit file</h2>
+
+<p>Create a systemd service file for <code>vaydns-server</code>:</p>
+
+<p><code>vi /etc/systemd/system/vaydns.service</code></p>
+
+<p>Use the following as a model.</p>
+
+<ul>
+<li>Replace the example domain name with your own domain name.</li>
+<li>Replace the record type if you wish. The DNS record type may be <code>txt</code>, <code>null</code>, <code>cname</code>, <code>a</code>, <code>aaaa</code>, <code>mx</code>, <code>ns</code>, <code>srv</code>, or <code>caa</code>.</li>
+</ul>
+
+<pre>
+[Unit]
+Description=VayDNS userspace DNS tunnel
+Documentation=https://github.com/net2share/vaydns
+After=network.target
+
+[Service]
+User=vaydns
+Group=vaydns
+ExecStart=/usr/local/bin/vaydns-server -udp :5300 -privkey-file /etc/vaydns/server.key -domain v.example.com -record-type null -upstream 127.0.0.1:8000 
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+</pre>
+
+<p>Save the file.</p>
+
+
+
+<h2>8. Run VayDNS on server</h2>
+
+<p>Start the <code>vaydns</code> service:</p>
+
+<p><code>systemctl daemon-reload</code></p>
+
+<p><code>systemctl enable vaydns</code></p>
+
+<p><code>systemctl start vaydns</code></p>
+
+<p>Check that the status is active (running):</p>
+
+<p><code>systemctl start vaydns</code></p>
+
+<p>You will see messages like this:</p>
+
+<pre>
+serving domain: v.example.com
+transport config: queue-size=512 kcp-window-size=256 queue-overflow=drop
+wire config: clientid-size=2 compat=false
+pubkey 5cd4...
+effective MTU 936"
+</pre>
+
+<p>If you need to check the logs at any time in the future, you can do:</p>
+
+<p><code>journalctl -u vaydns</code></p>
+
+
+<h2>9. Create client configuration</h2>
+
+<p>Display the public key, as you will need it on the client:</p>
+
+<p><code>cat /etc/vaydns/server.pub</code></p>
+
+<p>The result is a string of 64 hexadecimal characters. You will need this string on your Android device. Since it is a <em>public</em> key, it does not need to be kept secret.</p>
+
+<p>Your work on the server is done for now, so exit your SSH session:</p>
+
+<p><code>exit</code></p>
+
+<p>On your Android device, install the latest SlipNet APK from <a href="https://github.com/anonvector/SlipNet/releases" target="_blank">https://github.com/anonvector/SlipNet/releases</a> or from the <a href="https://t.me/SlipNet_app" target="_blank">@SlipNet_app</a> Telegram channel.</p>
+
+<p>Add a SlipNet on Android profile of type VayDNS, specifying your subdomain name (e.g. <code>v.example.com</code>), the public key you created on the server, and the record type you chose on the server.</p>
+
+<p>A general local resolver in most countries is Google:</p>
+
+<p><code>8.8.8.8:53</code></p>
+
+<p>Here are some suggested local resolvers for Iran:</p>
+
+<p><code>2.189.44.44:53,2.182.253.245:53,5.202.78.2:53,10.185.68.113:53,217.218.155.155:53,2.182.42.6:53,46.100.14.49:53,2.188.21.130:53</code></p>
+
+<p>Now you can test that the SlipNet profile works on your Android device.</p>
+
+<p>When your testing is giving good results, optionally export the client configuration <code>slipnet://</code> or <code>slipnet-enc://</code> URL to share with other users.</p>
+
+
+
+<h2>10. Optionally run desktop client</h2>
+
+<p>Copy the client configuration <code>slipnet://</code> or <code>slipnet-enc://</code> URL from your Android device to your PC.</p>
+
+<p>Download the latest desktop client from <a href="https://github.com/anonvector/SlipNet/releases" target="_blank">https://github.com/anonvector/SlipNet/releases</a>.</p>
+
+<p>For example, for a Windows PC you would download <code>slipnet-windows-amd64.exe</code>.</p>
+
+<p>Open PowerShell and run the Windows executable. You will be prompted to enter your <code>slipnet://</code> or <code>slipnet-enc://</code> URL.</p>
+
+<p>The dialog will look something like this:
+
+<pre>
+.\slipnet-windows-amd64.exe
+
+╔══════════════════════════════════════════════════╗
+║          SlipNet CLI  v2.5.3                     ║
+╠══════════════════════════════════════════════════╣
+║                                                  ║
+║  1) Connect (DNSTT / NoizDNS / VayDNS)           ║
+║  2) DNS Scanner                                  ║
+║  3) DNS Scanner + E2E Test                       ║
+║  4) Quick Scan (single IP)                       ║
+║  5) Prism (server-verified scan)                 ║
+║  6) E2E Test Only                                ║
+║  7) Help                                         ║
+║  0) Exit                                         ║
+║                                                  ║
+╚══════════════════════════════════════════════════╝
+
+  Select option: 1
+
+  ── Connect ──────────────────────────────────────
+
+  Paste slipnet:// or slipnet-enc:// config: slipnet://Mjh8...
+
+  Profile:  example.com
+  Type:     vaydns
+  Domain:   v.example.com
+  Resolver: 8.8.8.8:53
+
+  Local port [1080]:
+  DNS override (blank = 8.8.8.8:53):
+  Authoritative mode? (y/N) [n]:
+  Max QNAME length 60–253, shorter = stealthier (default: 101) [101]:
+
+  Starting connection...
+  Press Ctrl+C to disconnect.
+
+  Checking DNS for v.example.com...
+  DNS delegation not available via public DNS
+  Found server, using direct mode
+
+╔══════════════════════════════════════════════════╗
+║          SlipNet CLI  v2.5.3                     ║
+╚══════════════════════════════════════════════════╝
+
+  Profile:    example.com
+  Type:       vaydns
+  Domain:     v.example.com
+  DNS:        
+  Transport:  udp
+  Auth Mode:  true
+  Resolver:   fast (round-robin)
+  Public Key: 5cd4...
+
+  SOCKS5 Proxy: 127.0.0.1:1080
+
+  Connecting...
+
+  Connected! SOCKS5 proxy listening on 127.0.0.1:1080
+
+  Configure your apps to use:
+    SOCKS5 proxy: 127.0.0.1:1080
+
+  Or use with curl:
+    curl --socks5-hostname 127.0.0.1:1080 https://ifconfig.me
+</pre>
+
+<p>Leave the window open with the SlipNet for Windows client running in it.</p>
+
+<p>Open another window and issue the suggested command, replacing <code>curl</code> by <code>curl.exe</code>:</p>
+
+<p><code>curl.exe --socks5-hostname 127.0.0.1:1080 https://ifconfig.me</code></p>
+
+<p>You should see your server IP address displayed.</p>
+
+<p>Now either configure the Windows system proxy to use the SOCKS5 proxy server on <code>127.0.0.1:1080</code>, or configure an individual browser to do so. The easiest one to use here is Firefox.</p>
+
+<p>When you are done testing, go to the window open with the SlipNet for Windows client running in it, then do <strong>Ctrl</strong>+<strong>c</strong> followed by <code>0</code> to exit.</p>
+
+
+</body>
+</html>
+
+
