@@ -20,8 +20,7 @@
 <ul>
 <li>A Debian or Ubuntu Linux VPS</li>
 <li>A domain name that you own</li>
-<li>An Android phone</li>
-<li>Optionally a laptop or desktop computer running Windows</li>
+<li>A laptop or desktop computer running Windows</li>
 </ul>
 
 <p>To avoid conflicts over the use of port <code>udp/53</code>, it is best <em>not</em> to use <code>systemd-resolved</code>. If <code>systemd-resolved</code> is running, you could start with <code>systemctl disable --now systemd-resolved</code> then add <code>nameserver 1.1.1.1</code> to <code>/etc/resolv.conf</code>. However, some VPS providers set up their servers in such a way that <code>/etc/resolv.conf</code> gets overwritten. You will have to investigate how to prevent this, as the procedure varies from provider to provider.</p>
@@ -231,126 +230,54 @@ effective MTU 936"
 <p><code>journalctl -u vaydns</code></p>
 
 
-<h2>9. Create client configuration</h2>
+<h2>9. Display public key</h2>
 
 <p>Display the public key, as you will need it on the client:</p>
 
 <p><code>cat /etc/vaydns/server.pub</code></p>
 
-<p>The result is a string of 64 hexadecimal characters. You will need this string on your Android device. Since it is a <em>public</em> key, it does not need to be kept secret.</p>
+<p>The result is a string of 64 hexadecimal characters. Make a note of it. You will need this string on your client. Since it is a <em>public</em> key, it does not need to be kept secret.</p>
 
 <p>Your work on the server is done for now, so exit your SSH session:</p>
 
 <p><code>exit</code></p>
 
-<p>On your Android device, install the latest SlipNet APK from <a href="https://github.com/anonvector/SlipNet/releases" target="_blank">https://github.com/anonvector/SlipNet/releases</a> or from the <a href="https://t.me/SlipNet_app" target="_blank">@SlipNet_app</a> Telegram channel.</p>
-
-<p>Add a SlipNet on Android profile of type VayDNS, specifying your subdomain name (e.g. <code>v.example.com</code>), the public key you created on the server, and the record type you chose on the server.</p>
-
-<p>A general local resolver in most countries is Google:</p>
-
-<p><code>8.8.8.8:53</code></p>
-
-<p>Here are some suggested local resolvers for Iran:</p>
-
-<p><code>2.189.44.44:53,2.182.253.245:53,5.202.78.2:53,10.185.68.113:53,217.218.155.155:53,2.182.42.6:53,46.100.14.49:53,2.188.21.130:53</code></p>
-
-<p>Now you can test that the SlipNet profile works on your Android device.</p>
-
-<p>When your testing is giving good results, optionally export the client configuration <code>slipnet://</code> or <code>slipnet-enc://</code> URL to share with other users.</p>
 
 
+<h2>10. Run desktop client</h2>
 
-<h2>10. Optionally run desktop client</h2>
+<p>Download the latest desktop client from <a href="https://github.com/net2share/vaydns/releases" target="_blank">https://github.com/net2share/vaydns/releases</a>.</p>
 
-<p>Copy the client configuration <code>slipnet://</code> or <code>slipnet-enc://</code> URL from your Android device to your PC.</p>
+<p>For example, for a Windows PC you would download <code>vaydns-client-windows-amd64.exe</code>.</p>
 
-<p>Download the latest desktop client from <a href="https://github.com/anonvector/SlipNet/releases" target="_blank">https://github.com/anonvector/SlipNet/releases</a>.</p>
+<p>Open PowerShell and run the Windows executable. In the example command that follows, make these replacements:</p>
 
-<p>For example, for a Windows PC you would download <code>slipnet-windows-amd64.exe</code>.</p>
+<ul>
+<li>Change <code>8.8.8.8:53</code> to a local resolver</li>
+<li>Change <code>v.example.com</code> to your own domain</li>
+<li>Change <code>5cd4...</code> to your actual public key</li>
+<li>Change <code>null</code> to the record type you are using</li>
+</ul>
 
-<p>Open PowerShell and run the Windows executable. You will be prompted to enter your <code>slipnet://</code> or <code>slipnet-enc://</code> URL.</p>
+<p><code>./vaydns-client-windows-amd64.exe -udp 8.8.8.8:53 -domain v.example.com -pubkey 5cd4... -record-type null -listen 127.0.0.1:7000</code></p>
 
-<p>The dialog will look something like this:
+<p>Leave the window open with the client running in it.</p>
 
-<pre>
-.\slipnet-windows-amd64.exe
+<p>Open another PowerShell window and issue the suggested command:</p>
 
-╔══════════════════════════════════════════════════╗
-║          SlipNet CLI  v2.5.3                     ║
-╠══════════════════════════════════════════════════╣
-║                                                  ║
-║  1) Connect (DNSTT / NoizDNS / VayDNS)           ║
-║  2) DNS Scanner                                  ║
-║  3) DNS Scanner + E2E Test                       ║
-║  4) Quick Scan (single IP)                       ║
-║  5) Prism (server-verified scan)                 ║
-║  6) E2E Test Only                                ║
-║  7) Help                                         ║
-║  0) Exit                                         ║
-║                                                  ║
-╚══════════════════════════════════════════════════╝
-
-  Select option: 1
-
-  ── Connect ──────────────────────────────────────
-
-  Paste slipnet:// or slipnet-enc:// config: slipnet://Mjh8...
-
-  Profile:  example.com
-  Type:     vaydns
-  Domain:   v.example.com
-  Resolver: 8.8.8.8:53
-
-  Local port [1080]:
-  DNS override (blank = 8.8.8.8:53):
-  Authoritative mode? (y/N) [n]:
-  Max QNAME length 60–253, shorter = stealthier (default: 101) [101]:
-
-  Starting connection...
-  Press Ctrl+C to disconnect.
-
-  Checking DNS for v.example.com...
-  DNS delegation not available via public DNS
-  Found server, using direct mode
-
-╔══════════════════════════════════════════════════╗
-║          SlipNet CLI  v2.5.3                     ║
-╚══════════════════════════════════════════════════╝
-
-  Profile:    example.com
-  Type:       vaydns
-  Domain:     v.example.com
-  DNS:        
-  Transport:  udp
-  Auth Mode:  true
-  Resolver:   fast (round-robin)
-  Public Key: 5cd4...
-
-  SOCKS5 Proxy: 127.0.0.1:1080
-
-  Connecting...
-
-  Connected! SOCKS5 proxy listening on 127.0.0.1:1080
-
-  Configure your apps to use:
-    SOCKS5 proxy: 127.0.0.1:1080
-
-  Or use with curl:
-    curl --socks5-hostname 127.0.0.1:1080 https://ifconfig.me
-</pre>
-
-<p>Leave the window open with the SlipNet for Windows client running in it.</p>
-
-<p>Open another window and issue the suggested command, replacing <code>curl</code> by <code>curl.exe</code>:</p>
-
-<p><code>curl.exe --socks5-hostname 127.0.0.1:1080 https://ifconfig.me</code></p>
+<p><code>curl.exe --proxy socks5h://127.0.0.1:7000/ https://wtfismyip.com/text</code></p>
 
 <p>You should see your server IP address displayed.</p>
 
-<p>Now either configure the Windows system proxy to use the SOCKS5 proxy server on <code>127.0.0.1:1080</code>, or configure an individual browser to do so. The easiest one to use here is Firefox.</p>
+<p>Now either configure the Windows system proxy to use the SOCKS5 proxy server on <code>127.0.0.1:7000</code>, or configure an individual browser to do so. The most convenient browser to use here is Firefox.</p>
 
-<p>When you are done testing, go to the window open with the SlipNet for Windows client running in it, then do <strong>Ctrl</strong>+<strong>c</strong> followed by <code>0</code> to exit.</p>
+<p>When you are done testing, go to the window with the client running in it, and do <strong>Ctrl</strong>+<strong>c</strong>.</p>
+
+
+<h2>11. Issues</h2>
+
+<p>If you experience any issues, report them on <a href="https://github.com/net2share/vaydns/issues" target="_blank">https://github.com/net2share/vaydns/issues</a>.</p>
+
 
 
 </body>
