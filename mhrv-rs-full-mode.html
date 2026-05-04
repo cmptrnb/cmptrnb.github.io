@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MasterHttpRelayVPN-RUST full mode</title>
+</head>
+<body style="max-width:48em;margin:0 auto;">
+
+<p><a href="https://cmptrnb.github.io">https://cmptrnb.github.io</a></p>
+
+<h1>Test script for MasterHttpRelayVPN-RUST full mode</h1>
+
+
+<p>This page documents my testing procedure. It is based on the developer's documentation at 
+<a href="https://github.com/therealaleph/MasterHttpRelayVPN-RUST" target="_blank">MasterHttpRelayVPN-RUST</a> 
+and in particular on issue <a href="https://github.com/therealaleph/MasterHttpRelayVPN-RUST/issues/444" target="_blank">#444</a> and <a href="https://github.com/therealaleph/MasterHttpRelayVPN-RUST/issues/671" target="_blank">#671</a>.</p>
+
+<p>Full mode routes all traffic end-to-end through a Google Apps Script, then through a remote tunnel-node. The trade-off versus apps_script mode is that it works for any protocol and any app, with no man-in-the-middle CA certificate required, but it results in higher latency.</p>
+
+<p>For full mode, you will need to base your Google Apps Script on <code>CodeFull.gs</code>, not the normal <code>Code.gs</code>.</p>
+
+
+<h2>Step 1 -- Install Docker on VPS</h2>
+
+<p>SSH into your server as <code>root</code>.</p>
+
+<p>Add Docker's official GPG key:</p>
+
+<p><code>apt update &amp;&amp; apt upgrade -y</code></p>
+<p><code>apt install -y ca-certificates curl</code></p>
+<p><code> install -m 0755 -d /etc/apt/keyrings</code></p>
+<p><code>curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc</code></p>
+<p><code>chmod a+r /etc/apt/keyrings/docker.asc</code></p>
+
+<p>Add the Docker repository to your APT sources:</p>
+
+<pre>
+tee /etc/apt/sources.list.d/docker.sources &lt;&lt;EOF
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: $(. /etc/os-release &amp;&amp; echo "$VERSION_CODENAME")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+</pre>
+
+<p>Update your store of package metadata:</p>
+
+<p><code>apt update</code></p>
+
+<p>Install Docker:</p>
+
+<p><code>apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin</code></p>
+
+<p>Test your Docker install:</p>
+
+<p><code>docker run hello-world</code></p>
+
+<p>You should see some messages, including:</p>
+
+<pre>
+Hello from Docker!
+This message shows that your installation appears to be working correctly.
+</pre>
+
+
+<h2>Step 2 -- Deploy tunnel-node on VPS</h2>
+
+<p>Open port <code>tcp/8080</code> for input in your server firewall. Persist this change across reboots.</p>
+
+<p>In the command below, change the literal <code>YOUR_TUNNEL_AUTH_KEY</code> to your choice of tunnel authentication key (password). Make a note of your choice for <code>YOUR_TUNNEL_AUTH_KEY</code>, as you'll need it in Step 3.</p>
+
+<p><code>docker run -d --name mhrv-tunnel --restart unless-stopped -p 8080:8080 -e TUNNEL_AUTH_KEY="YOUR_TUNNEL_AUTH_KEY" ghcr.io/therealaleph/mhrv-tunnel-node:latest</code></p>
+
+<p><code>docker-proxy</code> is now listening on external port <code>tcp/8080</code> (mapped to internal  port <code>tcp/8080</code>).</p>
+
+
+<h3>Initial checks</h3>
+
+<p>Check that the firewall is open:</p>
+
+<p><code>iptables -L -n | grep 8080</code></p>
+
+<p>Response:</p>
+
+<p><code>ACCEPT     tcp  --  0.0.0.0/0            0.0.0.0/0            tcp dpt:8080</code></p>
+
+<p>Check the external listening port:</p>
+
+<p><code>ss -tulpn | grep 8080</code></p>
+
+<p>Response:</p>
+
+<p><code>tcp   LISTEN 0      4096         0.0.0.0:8080      0.0.0.0:*    users:(("docker-proxy",pid=1975,fd=8))<br>
+tcp   LISTEN 0      4096            [::]:8080         [::]:*    users:(("docker-proxy",pid=1979,fd=8))</code></p>
+
+<p>Check the internal listening port:</p>
+
+<p><code>docker container logs mhrv-tunnel</code></p>
+
+<p>Response:</p>
+
+<p><code>INFO tunnel_node: tunnel-node listening on 0.0.0.0:8080</code></p>
+
+<p>Issue the command below, replacing <code>YOUR_TUNNEL_AUTH_KEY</code> with your actual tunnel authentication key, as chosen a moment ago:</p>
+
+<p><code>curl -X POST 'http://127.0.0.1:8080/tunnel' -H 'Content-Type: application/json' -d '{"k":"YOUR_TUNNEL_AUTH_KEY","op":"connect","host":"www.google.com","port":443}' --max-time 10 &amp;&amp; echo ''</code></p>
+
+<p>Response:</p>
+
+<p><code>{"sid":"&lt;UUID&gt;","eof":false}</code></p>
+
+<p>Exit your SSH session with the server:</p>
+
+<p><code>exit</code></p>
+
+<p>In a command prompt window on your PC, check the reachability of your server, replacing <code>YOUR_VPS_IP</code> by your actual server IP address:</p>
+
+<p><code>curl.exe -k -i http://YOUR_VPS_IP:8080/</code></p>
+
+<p>Response:</p>
+
+<p><code>HTTP/1.1 404 Not Found<br>
+content-length: 0<br>
+date: Sun, 03 May 2026 14:57:16 GMT</code></p>
+
+
+
+<h2>Step 3 -- Create the Google Apps Script</h2>
+
+<p>Start a new Google Apps Script as follows:</p>
+
+<ol>
+<li>In a browser on your PC, open <a href="https://script.google.com" target="_blank">https://script.google.com</a>.</li>
+<li>If necessary, sign in with your Google account.</li>
+<li>Click <strong>New project</strong> at the top left.</li>
+<li>Rename the project to, for example, <code>MasterHttpRelayVPN-RUST full mode</code>.</li>
+<li>Completely delete the default code <code>function myFunction() { ... }</code>.</li>
+<li>Open the file <a href="https://github.com/therealaleph/MasterHttpRelayVPN-RUST/blob/main/assets/apps_script/CodeFull.gs" target=_blank">CodeFull.gs</a> (<em>not</em> <code>Code.gs</code>) in the <code>MasterHttpRelayVPN-RUST</code> GitHub repository.</li>
+<li>Copy all the contents from the script in the repository.</li>
+<li>Paste them into the Apps Script editor, completely replacing what was there when you started.</li>
+<li>Scroll up and find theses lines near the top of the code:</li>
+</ol>
+
+<pre>
+const AUTH_KEY = "CHANGE_ME_TO_A_STRONG_SECRET";
+const TUNNEL_SERVER_URL = "http://YOUR_VPS_IP:8080";
+const TUNNEL_AUTH_KEY = "YOUR_TUNNEL_AUTH_KEY";
+</pre>
+
+<p>Substitute in your choice of script authentication key (password) where it says <code>CHANGE_ME_TO_A_STRONG_SECRET</code>. Fill in your own values for <code>YOUR_VPS_IP</code> and <code>YOUR_TUNNEL_AUTH_KEY</code> (chosen in Step 2).</p>
+
+<p>For testing purposes only, also scroll down and change diagnostic mode to true:</p>
+
+<pre>
+const DIAGNOSTIC_MODE = true;
+</pre>
+
+<p>Save the edited script.</p>
+
+<p>Now deploy the script as follows:</p>
+
+<ol>
+<li>At the top right, click <strong>Deploy</strong> &gt; <strong>New deployment</strong>.</li>
+<li>Click the gear icon next to <strong>Select type</strong>, and choose <strong>Web app</strong>.</li>
+<li>Enter a description, e.g. <code>MasterHttpRelayVPN-RUST full mode</code>.</li>
+<li>Set Execute as <code>Me</code> (your Google account).</li>
+<li>Set Who has access to <code>Anyone</code>.</li>
+<li>Click <strong>Deploy</strong>.</li>
+<li>Click <strong>Authorize access</strong>.</li>
+<li>You will see a warning window. Click <strong>Advanced</strong>, <strong>Go to MasterHttpRelayVPN-RUST full mode (unsafe)</strong>, <strong>Continue</strong>, and <strong>Done</strong> to approve it.</li>
+<li>Google displays a Deployment ID. It is a 72-character string.</li>
+<li>Copy the Deployment ID into a text editor and save it. You'll need it in Step 5.</li>
+</ol>
+
+
+<h2>Step 4 -- Download mhrv-rs client</h2>
+
+<p>In a browser on your PC, go to the latest release page <a href="https://github.com/therealaleph/MasterHttpRelayVPN-RUST/releases/latest" target="_blank">https://github.com/therealaleph/MasterHttpRelayVPN-RUST/releases/latest</a>.</p>
+
+<p>Download the client for your computer. For Windows it will be named  
+<code>mhrv-rs-windows-amd64.zip</code>.</p>
+
+<p>Unzip the zip file you just downloaded.</p>
+
+
+
+<h2>Step 5 -- First run</h2>
+
+<p>In your file manager, open the unzipped folder <code>mhrv-rs-windows-amd64</code>.</p>
+
+<p>Double-click the launcher <code>run.bat</code>.</p>
+
+<p>Make sure you trust the software, and if so click <strong>Run</strong>.</p>
+
+<p>When asked if you want to install the CA certificate, you can choose <strong>No</strong> in the case of full mode.</p>
+
+<p>The <code>mhrv-rs</code> control panel opens. Fill in the details:</p>
+
+<ul>
+<li>Mode: <code>Full tunnel (no cert)</code>.</li>
+<li>Deployment IDs: Paste in the 72-character Deployment ID that Google displayed in Step 3.</li>
+<li>Auth key: Paste in the script authentication key (password) you chose in Step 3.</li>
+<li>Leave everything else at the defaults.</li>
+<li>Click <strong>Save config</strong>.</li>
+<li>The configuration file is saved as <code>C:\Users\&lt;your-windows-user&gt;\AppData\Roaming\mhrv-rs\config\config.json</code>.</li>
+<li>Click <strong>Start</strong>.</li>
+<li>The status circle (at the top right of the <code>mhrv-rs</code> control panel) goes green if it works.</li>
+</ul>
+
+
+<h2>Step 6 -- Tell your browser to use mhrv-rs</h2>
+
+<p>Firefox is recommended as the easiest browser for quickly setting a proxy server.</p>
+
+<ol>
+<li>From the hamburger menu, select <strong>Settings</strong>.</li>
+<li>On the <strong>General</strong> page, select <strong>Network Settings</strong>.</li>
+<li>Choose <strong>Manual proxy configuration</strong>.</li>
+<li>HTTP Proxy <code>127.0.0.1</code> Port <code>8085</code>.</li>
+<li>Check <strong>Also use this proxy for HTTPS</strong>.</li>
+<li>Click <strong>OK</strong>.</li>
+</ol>
+
+<p>Alternatively, or if you are using a different browser, you can set your system-wide proxy to <code>127.0.0.1</code> port <code>8085</code>.</p>
+
+
+
+<h2>Step 7 -- Test from browser</h2>
+
+<p>In your browser, visit <a href="https://wtfismyip.com" target="_blank">https://wtfismyip.com</a>.</p>
+
+<p>It should display your tunnel-node's IP address.</p>
+
+<p>If you have any problems, open the Apps Script Executions tab, and look for the most recent <code>_doTunnel</code> run and its error, if any.</p>
+
+
+<h2>Step 8 -- Report issues</h2>
+
+<p>If you encounter any issues, report them on <a href="https://github.com/therealaleph/MasterHttpRelayVPN-RUST/issues" target="_blank">https://github.com/therealaleph/MasterHttpRelayVPN-RUST/issues</a>.</p>
+
+
+
+</body>
+</html>
+
+
