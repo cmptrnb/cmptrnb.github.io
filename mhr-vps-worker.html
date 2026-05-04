@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mhr-vps-worker</title>
+</head>
+<body style="max-width:48em;margin:0 auto;">
+
+<p><a href="https://cmptrnb.github.io">https://cmptrnb.github.io</a></p>
+
+<h1>mhr-vps-worker</h1>
+
+<p><a href="https://github.com/aliasoblomov/mhr-vps-worker" tarfet="_blank"><code>mhr-vps-worker</code></a> is a specialized adaptation of the <a href="https://github.com/denuitt1/mhr-cfw" target="_blank"><code>mhr-cfw</code></a> engine that replaces Cloudflare Workers with a private VPS-based <code>node.js</code> worker.</p>
+
+
+
+
+
+<h2>Step 1. Configure VPS</h2>
+
+
+<h3>1.1. Install Node.JS and PM2</h3>
+
+<p>In this step, you will connect to your VPS via SSH and install Node.JS and PM2 (a production-grade daemon process manager for Node.JS).</p>
+
+<p>SSH into your server, substituting in your real server IP where it says <code>YOUR_SERVER_IP</code>:</p>
+
+<p><code>ssh root@YOUR_SERVER_IP</code></p>
+
+<p>Get your server up to date:</p>
+
+<p><code>apt update &amp;&amp; apt upgrade -y</code></p>
+
+<p>Download and install nvm:</p>
+
+<p><code>curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash</code></p>
+
+<p>In lieu of restarting your shell:</p>
+
+<p><code>\. "$HOME/.nvm/nvm.sh"</code></p>
+
+<p>Download and install Node.js:</p>
+
+<p><code>nvm install 24</code></p>
+
+<p>Verify the Node.js version:</p>
+
+<p><code>node -v</code></p>
+
+<p>It should print <code>v24.15.0</code>.</p>
+
+<p>Verify npm version:</p>
+
+<p><code>npm -v</code></p>
+
+<p>It should print <code>11.12.1</code>.</p>
+
+
+<p>Install PM2:</p>
+
+<p><code>npm install pm2 -g</code></p>
+
+
+
+<h3>1.2. Install mhr-vps-worker server.js</h3>
+
+<p>Open port 8081 in your Linux firewall:</p>
+
+<p><code>iptables -I INPUT -p tcp --dport 8081 -j ACCEPT</code></p>
+
+<p>Persist the new rule across reboots:</p>
+
+<p><code>dpkg reconfigure iptables-persistent</code></p>
+
+
+<p>Deploy the <code>server.js</code> file from <a href="https://github.com/aliasoblomov/mhr-vps-worker/tree/main/node-worker" target="_blank">https://github.com/aliasoblomov/mhr-vps-worker/tree/main/node-worker</a>, and run it:</p>
+
+<p><code>apt install -y git</code></p>
+
+<p><code>git clone https://github.com/aliasoblomov/mhr-vps-worker.git</code></p>
+
+<p><code>cd mhr-vps-worker/node-worker</code></p>
+
+<p><code>pm2 start server.js --name mhr-relay --node-args="--max-http-header-size=65536"</code></p>
+
+<p><code>pm2 save</code></p>
+
+<p>You should see a green status indicating that mhr-relay is <span style="color:green;">online</a>.</p>
+
+
+<h3>1.3. Initial checks</h3>
+
+<p>To double-check, run:</p>
+
+<p><code>pm2 logs mhr-relay</code></p>
+
+<p>You should see the message:</p>
+
+<p><code>Rock-Solid Worker running on port 8081</code></p>
+
+<p>To exit the live stream of PM2 logs in your terminal, press <strong>Ctrl</strong>+<strong>c</strong>.</p>
+
+<p>Check that it is listening on port 8081:</p>
+
+<p><code>ss -tulpn | grep 8081</code></p>
+
+<p>Response:</p>
+
+<p><code>tcp    LISTEN  0       511             0.0.0.0:8081          0.0.0.0:*      users:(("node /root/mhr-",pid=2714,fd=23))</code></p>
+
+<p>Exit your SSH session:</p>
+
+<p><code>exit</code></p>
+
+
+<h2>Step 2. Set up Google Apps Script relay</h2>
+
+<ol>
+<li>Open Google Apps Script <a href="https://script.google.com">https://script.google.com</a>.</li>
+<li>Sign in with your Google account.</li>
+<li>Click <strong>New project</strong>.</li>
+<li>Rename it to, for example, <code>mhr-vps-worker</code>.</li>
+<li>Delete all the default code in the editor.</li>
+<li>Open the <code>Code.gs</code> file from this project <a href="https://github.com/aliasoblomov/mhr-vps-worker/tree/main/script" target="_blank">https://github.com/aliasoblomov/mhr-vps-worker/tree/main/script</a> (under <code>script/</code>), copy everything, and paste it into the Apps Script editor.</li>
+<li>Change the authentication key <code>STRONG_SECRET_KEY</code> to something only you know.</li>
+<li>Also substitute in your actual server IP for <code>YOUR_SERVER_IP</code>.</li>
+</ol>
+
+<pre>
+// Replace with your Secret
+const AUTH_KEY = "STRONG_SECRET_KEY";
+// Replace with your VPS IP
+const VPS_IP = "YOUR_VPS_IP"; 
+const WORKER_URL = "http://" + VPS_IP + ":8081";
+</pre>
+
+<ol>
+<li>Save your edited script.</li>
+<li>Click <strong>Deploy</strong> &gt; <strong>New deployment</strong>.</li>
+<li>Click the gear icon next to <strong>Select type</strong>, and choose <strong>Web app</strong>.</li>
+<li>Enter a description, e.g. <code>mhr-vps-worker</code>.</li>
+<li>Set Execute as <code>Me</code> (your Google account).</li>
+<li>Set Who has access to <code>Anyone</code>.</li>
+<li>Click <strong>Deploy</strong>.</li>
+<li>Click <strong>Authorize access</strong>.</li>
+<li>You will see a warning window. Click <strong>Advanced</strong>, <strong>Go to mhr-vps-worker (unsafe)</strong>, <strong>Continue</strong>, and <strong>Done</strong> to approve it.</li>
+<li>Click <strong>Deploy</strong>.</li>
+<li>Copy the Deployment ID (it is a 72-character string). You'll need it when you configure the client.</li>
+</ol>
+
+
+
+
+<h2>Step 3. Install client on Windows</h2>
+
+
+<h3>3.1. Install Python on client</h3>
+
+<p>If you have not already done so, install Python for Windows from <a href="https://www.python.org/downloads" target="_blank">https://www.python.org/downloads</a>.</p>
+
+<p>Once the installation is complete, check that you now have Python installed:</p>
+
+<p><code>py --version</code></p>
+
+
+<h3>3.2. Download pip to client</h3>
+
+<p>If <code>C:\Users\&lt;your-windows-id&gt;\AppData\Local\Python\pythoncore-3.14-64\Scripts</code> does <strong><em>not</em></strong> already contain <code>pip.exe</code>, then download <code>pip.exe</code> like this:</p>
+
+<ol>
+<li>Download the <code>get-pip.py</code> script by right-clicking and <strong>Save Link As</strong> from <a href="https://bootstrap.pypa.io/get-pip.py" target="_blank">https://bootstrap.pypa.io/get-pip.py</a>.</li>
+<li>Open a command prompt.</li>
+<li><code>cd</code> to the folder containing the <code>get-pip.py</code> file:</li>
+<li>Run the Python script by issuing the command <code>py get-pip.py</code></li>
+<li>You will see a message, <code>WARNING: The scripts pip.exe, pip3.14.exe and pip3.exe are installed in 'C:\Users\&lt;your-windows-id&gt;\AppData\Local\Python\pythoncore-3.14-64\Scripts' which is not on PATH.</code></li>
+</ol>
+
+
+<h3>3.3. Add pip to path</h3>
+
+<p>Add <code>pip.exe</code> to your execution path:</p>
+
+<ol>
+<li>In the Windows search box type <code>env</code>, and select <strong>Edit the system environment variables</strong>.</li>
+<li>Click <strong>Environent Variables</strong>.</li>
+<li>Click <strong>Path</strong>.</li>
+<li>Click <strong>Edit</strong>.</li>
+<li>Click <strong>New</strong>.</li>
+<li>Fill in <code>C:\Users\&lt;your-windows-id&gt;\AppData\Local\Python\pythoncore-3.14-64\Scripts</code>, replacing <code>&lt;your-windows-id&gt;</code> by your actual Windows id on your local PC.</li>
+<li>Click <strong>OK</strong>.</li>
+<li>Click <strong>OK</strong>.</li>
+<li>Click <strong>OK</strong>.</li>
+</ol>
+
+<p>Restart your computer. After restarting, check that your path includes the Python scripts:</p>
+
+<ul>
+<li>Either in a command prompt, issue the command <code>echo %PATH%</code></li>
+<li>Or in Windows PowerShell, issue the command <code>$Env:Path</code></li>
+</ul>
+
+<p>Check that you have pip installed:</p>
+
+<p><code>pip --version</code></p>
+
+
+<h3>3.4. Install mhr-vps-worker on client</h3>
+
+<p>Now download the project from <a href="https://github.com/aliasoblomov/mhr-vps-worker/archive/refs/heads/main.zip" target="_blank">https://github.com/aliasoblomov/mhr-vps-worker/archive/refs/heads/main.zip</a>.</p>
+
+<p>Unzip the zip file <code>main.zip</code>.<?p>
+
+<p>Change into the unzipped folder:</p>
+
+<p><code>cd Downloads\mhr-vps-worker-main\mhr-vps-worker-main</code></p>
+
+<p>Open a command prompt window here. Install the requirements:</p>
+
+<p><code>pip install -r requirements.txt</code></p>
+
+
+
+<h2>Step 4. Configure client</h2>
+
+<p>In the <code>mhr-vps-worker</code> folder, make a copy of <code>config.example.json</code> named <code>config.json</code>.</p>
+
+<p>Edit the <code>config.json</code> file (for example with Notepad or Notepad++).</p>
+
+<pre>
+        ...
+	"script_id": "YOUR_APPS_SCRIPT_DEPLOYMENT_ID",
+	"auth_key": "CHANGE_ME_TO_A_STRONG_SECRET",
+        ...
+	"relay_timeout": 25,
+        ...
+        "direct_google_exclude": [
+          "gemini.google.com",
+          "chatgpt.com"
+        ]
+        ...
+</pre>
+
+<p>Make the following adjustments:</p>
+
+<ul>
+<li>Update the <code>script_id</code>. You can enter either one Deployment ID or multiple Deployment IDs separated by commas (for load balancing).</li>
+<li>Enter the authentication key you chose for the Google relay in Step 2.</li>
+<li>Set <code>relay_timeout</code> to 60.</li>
+</ul>
+
+<p>Save the file with your changes in it.</p>
+
+
+<h2>Step 5. Run client</h2>
+
+<p>Double-click the <code>run.bat</code> file to start the relay.</p>
+
+<p>If necessary, click <strong>Run</strong>.</p>
+
+<p>Say <strong>Yes</strong> to install the <code>mhr-cfw</code> root certificate.</p>
+
+<p>You should see messages:</p>
+
+<p><code>INFO   [Proxy   ]  HTTP proxy listening on 0.0.0.0:8085<br>
+INFO   [Proxy   ]  SOCKS5 proxy listening on 0.0.0.0:1080</code></p>
+
+
+
+<h2>Step 6. Configure browser to use client</h2>
+
+<p>Choose which proxy you prefer to use:</p>
+
+<ul>
+<li>HTTP proxy on <code>127.0.0.1</code> port <code>8085</code></li>
+<li>SOCKS5 proxy on <code>127.0.0.1</code> port <code>1080</code></li>
+</ul>
+
+<p>Also set up one of these method to direct your browser to use the proxy:</p>
+
+<ul>
+<li>Directly in Firefox network settings</li>
+<li>Install FoxyProxy in Chrome</li>
+<li>Windows system-wide proxy settings</li>
+<li>Define a SOCKS5 proxy in v2rayN</li>
+</ul>
+
+
+<h2>Step 7. End-to-end test</h2>
+
+Open <a href="https://ipleak.net" target="_blank">ipleak.net</a> in your browser.</p>
+
+<p>You should see your VPS IP address.</p>
+
+</body>
+</html>
+
+
